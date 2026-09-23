@@ -1,19 +1,21 @@
 /*
- * Hydroponic ESP32 firmware - DHT22 + EC + pH -> JSON over USB serial
+ * Hydroponic ESP32 firmware - DHT22 + EC + pH + HC-SR04 -> JSON over USB serial
  *
  * Wiring:
- *   DHT22 : DATA -> GPIO15, VCC -> 3.3V, GND -> GND
- *   EC    : A0 -> GPIO34, VCC -> 3.3V, GND -> GND (T1 unconnected)
- *   pH    : Po -> 10k/20k divider -> GPIO35, V+ -> 5V, G -> GND
+ *   DHT22   : DATA -> GPIO15, VCC -> 3.3V, GND -> GND
+ *   EC      : A0 -> GPIO34, VCC -> 3.3V, GND -> GND (T1 unconnected)
+ *   pH      : Po -> 10k/20k divider -> GPIO35, V+ -> 5V, G -> GND
+ *   HC-SR04 : TRIG -> GPIO32, ECHO -> 1k/2k divider -> GPIO33, VCC -> 5V, GND -> GND
  *
  * Output (every 2 s, one line):
- *   {"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":null,"ec_mv":237,"po_mv":2650}
+ *   {"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,
+ *    "level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2}
  * Lines starting with '#' or '>>>' are messages, not data.
  *
  * Serial commands (115200, line ending = Newline):
- *   EC : enterec -> (1413 buffer) calec -> (12.88 buffer) calec -> exitec
- *   pH : ph7 (probe in pH 7 buffer) -> ph4 (probe in pH 4 buffer)
- *        phreset = back to defaults
+ *   EC   : enterec -> (1413 buffer) calec -> (12.88 buffer) calec -> exitec
+ *   pH   : ph7 (pH 7 buffer) -> ph4 (pH 4 buffer), phreset
+ *   Tank : tankempty (tank EMPTY) -> tankfull (tank at MAX level), tankreset
  *   status = show calibration values
  *   debug  = toggle human-readable lines
  *
@@ -29,25 +31,38 @@
 #define DHT_TYPE       DHT22
 #define EC_PIN         34
 #define PH_PIN         35
+#define TRIG_PIN       32
+#define ECHO_PIN       33
 
 // ---------- Settings ----------
 #define SEND_INTERVAL  2000     // ms between JSON lines
 #define EC_SAMPLES     30
 #define PH_SAMPLES     30
 #define PH_DIVIDER     1.5      // (10k + 20k) / 20k
-#define EEPROM_SIZE    32
-#define EC_KADDR       0x0A     // EC library uses bytes 10-17
-#define PH_ADDR_V7     0x14     // pH uses bytes 20-27
-#define PH_ADDR_V4     0x18
+#define US_SAMPLES     5        // ultrasonic pings per reading (median)
+#define US_TIMEOUT     30000UL  // us, ~5 m max
+#define LOW_LEVEL_PCT  20.0     // level_low alarm below this %
+
+// ---------- EEPROM layout ----------
+#define EEPROM_SIZE      48
+#define EC_KADDR         0x0A   // EC library: bytes 10-17
+#define PH_ADDR_V7       0x14   // pH: bytes 20-27
+#define PH_ADDR_V4       0x18
+#define TANK_ADDR_EMPTY  0x1C   // tank: bytes 28-35
+#define TANK_ADDR_FULL   0x20
 
 DHT dht(DHT_PIN, DHT_TYPE);
 DFRobot_EC ec;
 
 float waterTemp    = 25.0;      // fixed until a DS18B20 is added
+float lastAirTemp  = 25.0;      // from DHT22, used for sound speed
 float ecVoltage    = 0;
 bool  ecBelowRange = false;
-float phV7 = 2500.0;            // Po (mV) at pH 7  - default
-float phV4 = 3040.0;            // Po (mV) at pH 4  - default (~180 mV/pH)
+float phV7 = 2500.0;            // Po (mV) at pH 7 - default
+float phV4 = 3040.0;            // Po (mV) at pH 4 - default (~180 mV/pH)
+float tankEmptyDist = 20.0;     // cm, sensor -> bottom (empty tank) - default
+float tankFullDist  = 5.0;      // cm, sensor -> water at MAX level  - default
+bool  tankCalibrated = false;
 bool  debugMode = false;
 
 char    cmdBuf[32];
@@ -120,16 +135,80 @@ void savePhCal()
   EEPROM.commit();
 }
 
+// ================= Ultrasonic (water level) =================
+float readDistanceCm(float airTemp)
+{
+  if (isnan(airTemp)) airTemp = 25.0;
+  float speed = 331.3 + 0.606 * airTemp;         // speed of sound, m/s
+
+  float d[US_SAMPLES];
+  int n = 0;
+  for (int i = 0; i < US_SAMPLES; i++) {
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+
+    unsigned long us = pulseIn(ECHO_PIN, HIGH, US_TIMEOUT);
+    if (us > 0) {
+      float cm = us * speed / 20000.0;           // (us * m/s) / 2 -> cm
+      if (cm >= 2.0 && cm <= 400.0) d[n++] = cm;
+    }
+    delay(60);                                   // let echoes die out
+  }
+  if (n == 0) return NAN;
+
+  for (int i = 0; i < n - 1; i++)                // sort -> median
+    for (int j = i + 1; j < n; j++)
+      if (d[i] > d[j]) { float t = d[i]; d[i] = d[j]; d[j] = t; }
+  return d[n / 2];
+}
+
+void computeLevel(float dist, float &levelCm, float &levelPct)
+{
+  if (isnan(dist)) { levelCm = NAN; levelPct = NAN; return; }
+
+  levelCm = tankEmptyDist - dist;                // water height above bottom
+  if (levelCm < 0) levelCm = 0;
+
+  float range = tankEmptyDist - tankFullDist;
+  levelPct = (tankEmptyDist - dist) / range * 100.0;
+  if (levelPct < 0)   levelPct = 0;
+  if (levelPct > 100) levelPct = 100;
+}
+
+void loadTankCal()
+{
+  float e, f;
+  EEPROM.get(TANK_ADDR_EMPTY, e);
+  EEPROM.get(TANK_ADDR_FULL, f);
+  if (!isnan(e) && !isnan(f) && e > 2 && e < 400 && f > 2 && f < 400 && (e - f) >= 3) {
+    tankEmptyDist  = e;
+    tankFullDist   = f;
+    tankCalibrated = true;
+  }
+}
+
+void saveTankCal()
+{
+  EEPROM.put(TANK_ADDR_EMPTY, tankEmptyDist);
+  EEPROM.put(TANK_ADDR_FULL, tankFullDist);
+  EEPROM.commit();
+}
+
 // ================= Status / commands =================
 void printStatus()
 {
   float kLow, kHigh;
   EEPROM.get(EC_KADDR, kLow);
   EEPROM.get(EC_KADDR + 4, kHigh);
-  Serial.printf("# EC  Klow=%.3f  Khigh=%.3f%s\n", kLow, kHigh,
+  Serial.printf("# EC   Klow=%.3f  Khigh=%.3f%s\n", kLow, kHigh,
                 (kLow == 1.0 && kHigh == 1.0) ? "  (NOT calibrated)" : "");
-  Serial.printf("# pH  V7=%.0fmV  V4=%.0fmV  slope=%.1fmV/pH\n",
+  Serial.printf("# pH   V7=%.0fmV  V4=%.0fmV  slope=%.1fmV/pH\n",
                 phV7, phV4, (phV4 - phV7) / 3.0);
+  Serial.printf("# Tank empty=%.1fcm  full=%.1fcm%s\n",
+                tankEmptyDist, tankFullDist, tankCalibrated ? "" : "  (NOT calibrated)");
 }
 
 void handleCommand(char* cmd)
@@ -165,6 +244,32 @@ void handleCommand(char* cmd)
     phV7 = 2500.0; phV4 = 3040.0;
     savePhCal();
     Serial.println("# pH calibration reset to defaults");
+
+  } else if (!strcmp(cmd, "TANKEMPTY")) {
+    float d = readDistanceCm(lastAirTemp);
+    if (isnan(d)) { Serial.println("# tankempty rejected: no echo, check wiring/aim"); return; }
+    tankEmptyDist = d;
+    if (tankEmptyDist - tankFullDist < 3) tankFullDist = tankEmptyDist - 3;
+    saveTankCal();
+    Serial.printf("# tankempty saved: %.1fcm. Now fill to MAX level and send tankfull\n", d);
+
+  } else if (!strcmp(cmd, "TANKFULL")) {
+    float d = readDistanceCm(lastAirTemp);
+    if (isnan(d)) { Serial.println("# tankfull rejected: no echo, check wiring/aim"); return; }
+    if (tankEmptyDist - d < 3) {
+      Serial.printf("# tankfull rejected: %.1fcm is too close to empty (%.1fcm). Do tankempty first\n", d, tankEmptyDist);
+      return;
+    }
+    tankFullDist = d;
+    tankCalibrated = true;
+    saveTankCal();
+    Serial.printf("# tankfull saved: %.1fcm. Usable depth=%.1fcm. Tank calibration done\n",
+                  d, tankEmptyDist - tankFullDist);
+
+  } else if (!strcmp(cmd, "TANKRESET")) {
+    tankEmptyDist = 20.0; tankFullDist = 5.0; tankCalibrated = false;
+    saveTankCal();
+    Serial.println("# tank calibration reset to defaults");
 
   } else if (!strcmp(cmd, "STATUS")) {
     printStatus();
@@ -210,14 +315,18 @@ void setup()
   EEPROM.begin(EEPROM_SIZE);
   analogReadResolution(12);
   analogSetPinAttenuation(PH_PIN, ADC_11db);
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  digitalWrite(TRIG_PIN, LOW);
   dht.begin();
   ec.begin();
   loadPhCal();
+  loadTankCal();
 
   Serial.println();
   Serial.println("# Hydro ESP32 ready");
   printStatus();
-  Serial.println("# Commands: enterec calec exitec | ph7 ph4 phreset | status | debug");
+  Serial.println("# Commands: enterec calec exitec | ph7 ph4 phreset | tankempty tankfull tankreset | status | debug");
 }
 
 void loop()
@@ -230,12 +339,18 @@ void loop()
 
     float hum  = dht.readHumidity();
     float temp = dht.readTemperature();
+    if (!isnan(temp)) lastAirTemp = temp;
 
     ecVoltage     = readEcVoltage();
     float ecValue = ec.readEC(ecVoltage, waterTemp);
 
     float po = readPhPo();
     float ph = phFromPo(po);
+
+    float dist = readDistanceCm(lastAirTemp);
+    float levelCm, levelPct;
+    computeLevel(dist, levelCm, levelPct);
+    bool levelLow = !isnan(levelPct) && levelPct < LOW_LEVEL_PCT;
 
     // ---- JSON line for the Pi ----
     Serial.print('{');
@@ -244,14 +359,18 @@ void loop()
     printField("ec",   ecValue, 2);
     Serial.print(",\"ec_low\":"); Serial.print(ecBelowRange ? "true" : "false");
     printField("ph",   ph,   2);
-    Serial.print(",\"level\":null");              // HC-SR04 not added yet
-    printField("ec_mv", ecVoltage, 0);
-    printField("po_mv", po, 0);
+    printField("level",     levelCm,  1);
+    printField("level_pct", levelPct, 0);
+    Serial.print(",\"level_low\":"); Serial.print(levelLow ? "true" : "false");
+    printField("ec_mv",   ecVoltage, 0);
+    printField("po_mv",   po,        0);
+    printField("dist_cm", dist,      1);
     Serial.println('}');
 
     if (debugMode) {
-      Serial.printf("# T=%.1fC H=%.1f%%  EC=%.2f (%.0fmV%s)  pH=%.2f (Po %.0fmV)\n",
-                    temp, hum, ecValue, ecVoltage, ecBelowRange ? " LOW" : "", ph, po);
+      Serial.printf("# T=%.1fC H=%.1f%%  EC=%.2f (%.0fmV%s)  pH=%.2f (Po %.0fmV)  Level=%.1fcm %.0f%% (dist %.1fcm)\n",
+                    temp, hum, ecValue, ecVoltage, ecBelowRange ? " LOW" : "", ph, po,
+                    levelCm, levelPct, dist);
     }
   }
 }

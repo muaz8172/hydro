@@ -6,16 +6,22 @@
  *   EC      : A0 -> GPIO34, VCC -> 3.3V, GND -> GND (T1 unconnected)
  *   pH      : Po -> 10k/20k divider -> GPIO35, V+ -> 5V, G -> GND
  *   HC-SR04 : TRIG -> GPIO32, ECHO -> 1k/2k divider -> GPIO33, VCC -> 5V, GND -> GND
+ *   Relay   : IN1 (Pump A) -> GPIO25, IN2 (Pump B) -> GPIO26, VCC -> 5V, GND -> GND
  *
  * Output (every 2 s, one line):
  *   {"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,
- *    "level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2}
+ *    "level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,
+ *    "pump_a":true,"pump_b":true,"pump_auto":true}
  * Lines starting with '#' or '>>>' are messages, not data.
+ *
+ * Pumps (auto): Pump A + Pump B run only while EC AND pH are both inside
+ *   EC_MIN..EC_MAX and PH_MIN..PH_MAX. Otherwise (or bad reading) -> OFF.
  *
  * Serial commands (115200, line ending = Newline):
  *   EC   : enterec -> (1413 buffer) calec -> (12.88 buffer) calec -> exitec
  *   pH   : ph7 (pH 7 buffer) -> ph4 (pH 4 buffer), phreset
  *   Tank : tankempty (tank EMPTY) -> tankfull (tank at MAX level), tankreset
+ *   Pump : pumpaon pumpaoff pumpbon pumpboff (manual), pumpauto (back to auto)
  *   status = show calibration values
  *   debug  = toggle human-readable lines
  *
@@ -33,6 +39,16 @@
 #define PH_PIN         35
 #define TRIG_PIN       32
 #define ECHO_PIN       33
+#define PUMP_A_PIN     25       // relay IN1
+#define PUMP_B_PIN     26       // relay IN2
+
+// ---------- Pump control ----------
+#define RELAY_ACTIVE_LOW true   // most relay modules: LOW = ON. Set false if reversed
+// DUMMY ranges - replace with the exact values later
+#define EC_MIN         1.0      // mS/cm
+#define EC_MAX         1.6
+#define PH_MIN         5.5
+#define PH_MAX         6.5
 
 // ---------- Settings ----------
 #define SEND_INTERVAL  2000     // ms between JSON lines
@@ -64,6 +80,9 @@ float tankEmptyDist = 20.0;     // cm, sensor -> bottom (empty tank) - default
 float tankFullDist  = 5.0;      // cm, sensor -> water at MAX level  - default
 bool  tankCalibrated = false;
 bool  debugMode = false;
+bool  pumpAuto  = true;         // false = manual (serial commands)
+bool  pumpAOn   = false;
+bool  pumpBOn   = false;
 
 char    cmdBuf[32];
 uint8_t cmdLen = 0;
@@ -197,6 +216,26 @@ void saveTankCal()
   EEPROM.commit();
 }
 
+// ================= Pumps (relay) =================
+void setPump(uint8_t pin, bool &state, bool on)
+{
+  digitalWrite(pin, (on == RELAY_ACTIVE_LOW) ? LOW : HIGH);
+  if (state != on) {
+    state = on;
+    Serial.printf("# Pump %c %s\n", pin == PUMP_A_PIN ? 'A' : 'B', on ? "ON" : "OFF");
+  }
+}
+
+void updatePumps(float ecValue, float ph)
+{
+  if (!pumpAuto) return;
+  bool ecOk = !ecBelowRange && !isnan(ecValue) && ecValue >= EC_MIN && ecValue <= EC_MAX;
+  bool phOk = !isnan(ph) && ph >= PH_MIN && ph <= PH_MAX;
+  bool run  = ecOk && phOk;
+  setPump(PUMP_A_PIN, pumpAOn, run);
+  setPump(PUMP_B_PIN, pumpBOn, run);
+}
+
 // ================= Status / commands =================
 void printStatus()
 {
@@ -209,6 +248,9 @@ void printStatus()
                 phV7, phV4, (phV4 - phV7) / 3.0);
   Serial.printf("# Tank empty=%.1fcm  full=%.1fcm%s\n",
                 tankEmptyDist, tankFullDist, tankCalibrated ? "" : "  (NOT calibrated)");
+  Serial.printf("# Pump %s  A=%s B=%s  run when EC %.2f-%.2f and pH %.2f-%.2f\n",
+                pumpAuto ? "AUTO" : "MANUAL", pumpAOn ? "ON" : "OFF", pumpBOn ? "ON" : "OFF",
+                EC_MIN, EC_MAX, PH_MIN, PH_MAX);
 }
 
 void handleCommand(char* cmd)
@@ -271,6 +313,18 @@ void handleCommand(char* cmd)
     saveTankCal();
     Serial.println("# tank calibration reset to defaults");
 
+  } else if (!strcmp(cmd, "PUMPAON") || !strcmp(cmd, "PUMPAOFF") ||
+             !strcmp(cmd, "PUMPBON") || !strcmp(cmd, "PUMPBOFF")) {
+    pumpAuto = false;
+    bool on = !strcmp(cmd + 5, "ON");
+    if (cmd[4] == 'A') setPump(PUMP_A_PIN, pumpAOn, on);
+    else               setPump(PUMP_B_PIN, pumpBOn, on);
+    Serial.println("# Pump MANUAL mode (send pumpauto to return to auto)");
+
+  } else if (!strcmp(cmd, "PUMPAUTO")) {
+    pumpAuto = true;
+    Serial.println("# Pump AUTO mode");
+
   } else if (!strcmp(cmd, "STATUS")) {
     printStatus();
 
@@ -310,6 +364,12 @@ void printField(const char* key, float val, int dec, bool first = false)
 // ================= Main =================
 void setup()
 {
+  // relays OFF before making them outputs, so pumps don't kick on at boot
+  digitalWrite(PUMP_A_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
+  digitalWrite(PUMP_B_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
+  pinMode(PUMP_A_PIN, OUTPUT);
+  pinMode(PUMP_B_PIN, OUTPUT);
+
   Serial.begin(115200);
   delay(500);
   EEPROM.begin(EEPROM_SIZE);
@@ -326,7 +386,7 @@ void setup()
   Serial.println();
   Serial.println("# Hydro ESP32 ready");
   printStatus();
-  Serial.println("# Commands: enterec calec exitec | ph7 ph4 phreset | tankempty tankfull tankreset | status | debug");
+  Serial.println("# Commands: enterec calec exitec | ph7 ph4 phreset | tankempty tankfull tankreset | pumpaon pumpaoff pumpbon pumpboff pumpauto | status | debug");
 }
 
 void loop()
@@ -352,6 +412,8 @@ void loop()
     computeLevel(dist, levelCm, levelPct);
     bool levelLow = !isnan(levelPct) && levelPct < LOW_LEVEL_PCT;
 
+    updatePumps(ecValue, ph);
+
     // ---- JSON line for the Pi ----
     Serial.print('{');
     printField("temp", temp, 1, true);
@@ -365,6 +427,9 @@ void loop()
     printField("ec_mv",   ecVoltage, 0);
     printField("po_mv",   po,        0);
     printField("dist_cm", dist,      1);
+    Serial.print(",\"pump_a\":");    Serial.print(pumpAOn  ? "true" : "false");
+    Serial.print(",\"pump_b\":");    Serial.print(pumpBOn  ? "true" : "false");
+    Serial.print(",\"pump_auto\":"); Serial.print(pumpAuto ? "true" : "false");
     Serial.println('}');
 
     if (debugMode) {

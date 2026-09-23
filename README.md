@@ -20,6 +20,7 @@ hydro/
 ├── hydro-bridge.service       # Pi: systemd service for bridge.py
 ├── mosquitto/local.conf       # Pi: local-only Mosquitto config
 ├── udev/99-esp32.rules        # Pi: fixed /dev/esp32 port name
+├── Relay_Test/Relay_Test.ino  # ESP32: 2-channel relay test (Pump A / Pump B)
 └── esp32/hydro_esp32/
     ├── hydro_esp32.ino        # ESP32 firmware (DHT22 + EC + pH)
     ├── DFRobot_EC.cpp         # PATCHED EC library (ESP32 fixes)
@@ -36,6 +37,7 @@ hydro/
 | EC sensor (EC V2.1) | A0 / VCC / GND | GPIO34 / **3.3V** / GND | T1 unconnected |
 | pH sensor (PH-4502C) | Po / V+ / G | GPIO35 via divider / **5V** / GND | Do, To unconnected |
 | HC-SR04 (water level) | *planned* | *planned* | Echo needs a 1k + 2k divider |
+| 2-channel relay (Pump A / Pump B) | IN1 / IN2 / VCC / GND | GPIO25 / GPIO26 / **5V** / GND | Active LOW; GND shared with ESP32 |
 
 **pH voltage divider (required).** The PH-4502C runs on 5V and its output can exceed 3.3V:
 
@@ -85,6 +87,28 @@ The EC library is **not** installed from the Library Manager. Use the patched `D
 Lines starting with `#` or `>>>` are messages, not data.
 
 > Close the Arduino IDE Serial Monitor before running the bridge on the Pi. Only one program can use the port at a time.
+
+### Relay test (Pump A / Pump B) ✅ tested
+
+`Relay_Test/Relay_Test.ino` is a standalone sketch that checks the 2-channel relay module before it goes into the main firmware.
+
+**Setup:** relay **IN1 → Pump A**, **IN2 → Pump B** (GPIO25 / GPIO26). Only Pump A and Pump B are connected to the relay.
+
+**Method:**
+1. Upload `Relay_Test.ino`, open the Serial Monitor (115200, Newline).
+2. **Auto mode** runs at boot: Pump A ON 2 s → OFF 2 s → Pump B ON 2 s → OFF 2 s, repeating.
+3. Typing any command switches to manual:
+
+| Command | Action |
+|---|---|
+| `1on` / `1off` | Pump A (relay 1) ON / OFF |
+| `2on` / `2off` | Pump B (relay 2) ON / OFF |
+| `alloff` | Both OFF |
+| `auto` | Back to the automatic sequence |
+
+**Result:** both relays switched correctly and Pump A and Pump B ran on command. **Test successful.**
+
+> The relays are set OFF *before* the pins become outputs, so the pumps don't kick on at boot. If your module turns ON with HIGH, set `ACTIVE_LOW` to `false`.
 
 ---
 
@@ -275,5 +299,7 @@ git push
 - [ ] FastAPI + SQLite logger (`/api/latest`, `/api/history`)
 - [ ] React dashboard (live cards + history charts)
 - [ ] Camera AI (MaixVision) for leaf colour/size, publishing to `hydro/vision`
-- [ ] Pump, dosing pump and grow light control via relays
+- [x] Relay test: Pump A and Pump B (`Relay_Test/`)
+- [ ] Pump A / Pump B auto control from EC + pH range (in `Full_code`, dummy ranges for now)
+- [ ] Grow light control via relay
 - [ ] RTC battery for correct offline timestamps

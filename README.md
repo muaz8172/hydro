@@ -411,7 +411,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now hydro-dashboard
 ```
 Open **http://localhost:8000** on the Pi, or `http://<pi-ip>:8000` from a phone on the same
-network. This is the first step toward the full React dashboard in `docs/dashboard-design-plan.md`.
+network. If the browser can't reach MQTT on port 9001 (the header shows "Live link
+down"), the camera photo still updates through `dashboard/live/` (a link to `data/vision/live/`,
+which `vision.py` rewrites every 10 s). Sensor tiles need the MQTT link. This is the first step toward the full React dashboard in `docs/dashboard-design-plan.md`.
 
 ---
 

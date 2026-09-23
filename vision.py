@@ -12,6 +12,7 @@ Plant camera -> MQTT (offline, local only)
     hydro/vision        JSON result
     hydro/vision/image  the JPEG itself (binary)
     hydro/vision/status "online" / "offline: <reason>"
+  and writes data/vision/live/latest.jpg + latest.json (HTTP fallback for the dashboard)
 - Photos older than 30 days are deleted, except the first photo of each day
 
 Test with: python3 vision.py --once
@@ -43,6 +44,8 @@ TOPIC_CMD    = "hydro/vision/cmd"
 
 VISION_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "vision")
 CSV_PATH   = os.path.join(VISION_DIR, "vision_log.csv")
+LIVE_DIR   = os.path.join(VISION_DIR, "live")     # latest.jpg + latest.json, served by the
+                                                  # dashboard as an HTTP fallback to MQTT
 CSV_FIELDS = ["time", "image", "canopy_pct", "yellow_pct", "greenness", "health", "reasons"]
 
 # Only look at this part of the photo (fractions: left, top, right, bottom), to skip
@@ -126,6 +129,16 @@ def analyse(jpeg):
 
 
 # ================= Storage =================
+def write_live(jpeg, result):
+    """Replace live/latest.jpg and live/latest.json atomically (never a half-written file)."""
+    os.makedirs(LIVE_DIR, exist_ok=True)
+    for name, data in (("latest.jpg", jpeg), ("latest.json", json.dumps(result).encode())):
+        tmp = os.path.join(LIVE_DIR, name + ".tmp")
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, os.path.join(LIVE_DIR, name))
+
+
 def save(jpeg, now):
     rel = os.path.join(now.strftime("%Y-%m-%d"), now.strftime("%H-%M-%S") + ".jpg")
     path = os.path.join(VISION_DIR, rel)
@@ -193,6 +206,7 @@ def take_photo(client, keep):
 
     rel = save(jpeg, now) if keep else None
     result = {"ts": int(now.timestamp()), "image": rel, **analyse(jpeg)}
+    write_live(jpeg, result)
     client.publish(TOPIC_IMAGE, jpeg, retain=True)
     client.publish(TOPIC_RESULT, json.dumps(result), retain=True)
     if keep:

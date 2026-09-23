@@ -355,7 +355,7 @@ function onSensors(d) {
 }
 
 // ---------- camera ----------
-let photoUrl = null, lastPhotoAt = 0, camStatus = "waiting";
+let photoUrl = null, lastPhotoAt = 0, lastMqttImageAt = 0, camStatus = "waiting", via = "";
 const HEALTH = {
   healthy:   { cls: "good", icon: "check", text: "Healthy" },
   check:     { cls: "warn", icon: "alert", text: "Check leaves" },
@@ -363,6 +363,7 @@ const HEALTH = {
   no_plant:  { cls: "",     icon: "dash",  text: "No plant in view" },
 };
 function onImage(bytes) {
+  lastMqttImageAt = Date.now(); via = "";
   const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
   const img = $("photo-img");
   img.onload = () => { if (photoUrl && photoUrl !== url) URL.revokeObjectURL(photoUrl); photoUrl = url; };
@@ -371,6 +372,7 @@ function onImage(bytes) {
   $("photo-empty").hidden = true;
 }
 function onResult(r) {
+  if (r.ts && r.ts * 1000 <= lastPhotoAt) return;          // already showing this one
   lastPhotoAt = r.ts ? r.ts * 1000 : Date.now();
   const h = HEALTH[r.health] || { cls: "", icon: "dash", text: r.health };
   const v = $("verdict");
@@ -392,7 +394,8 @@ client.on("connect", () => {
   client.subscribe(["hydro/sensors", "hydro/vision", "hydro/vision/image", "hydro/vision/status"]);
   $("snap").disabled = false;
 });
-client.on("close", () => { setDot("mqtt", "bad", "MQTT disconnected"); $("snap").disabled = true; });
+client.on("close", () => { setDot("mqtt", "bad", "Live link down (MQTT :9001) · camera via HTTP"); $("snap").disabled = true; });
+client.on("error", (e) => console.warn("MQTT", e));
 client.on("message", (topic, payload) => {
   try {
     if (topic === "hydro/vision/image") return onImage(payload);
@@ -407,6 +410,26 @@ $("snap").addEventListener("click", () => {
   const b = $("snap"); b.textContent = "Saving…"; b.disabled = true;
   setTimeout(() => { b.textContent = "Save photo now"; b.disabled = !client.connected; }, 3000);
 });
+
+// ---------- HTTP fallback: if MQTT is down or quiet, read the photo vision.py writes to live/ ----------
+async function pollLive() {
+  if (client.connected && Date.now() - lastMqttImageAt < 25000) return;
+  try {
+    const res = await fetch("live/latest.json?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    const r = await res.json();
+    if (!r.ts || r.ts * 1000 <= lastPhotoAt) return;
+    const img = $("photo-img");
+    img.src = "live/latest.jpg?t=" + r.ts;
+    img.hidden = false;
+    $("photo-empty").hidden = true;
+    via = " · via HTTP";
+    camStatus = "online";
+    onResult(r);
+  } catch (e) { console.warn("live fallback", e); }
+}
+setInterval(pollLive, 5000);
+pollLive();
 
 // ---------- 1 s clock: ages, stale states ----------
 setInterval(() => {
@@ -430,7 +453,7 @@ setInterval(() => {
   const stamp = $("photo-stamp");
   if (lastPhotoAt) {
     stamp.hidden = false;
-    stamp.textContent = new Date(lastPhotoAt).toLocaleTimeString() + " · " + fmtAgo(now - lastPhotoAt) + " ago";
+    stamp.textContent = new Date(lastPhotoAt).toLocaleTimeString() + " · " + fmtAgo(now - lastPhotoAt) + " ago" + via;
   }
   const photo = $("photo");
   if (camStatus.startsWith("offline")) { setDot("cam", "bad", "Camera offline"); photo.classList.add("stale"); }

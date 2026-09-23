@@ -16,6 +16,7 @@
  *
  * Pumps (auto): Pump A + Pump B run only while EC AND pH are both inside
  *   EC_MIN..EC_MAX and PH_MIN..PH_MAX. Otherwise (or bad reading) -> OFF.
+ *   Tank low (level_low, once tank is calibrated) -> both OFF, even in manual.
  *
  * Serial commands (115200, line ending = Newline):
  *   EC   : enterec -> (1413 buffer) calec -> (12.88 buffer) calec -> exitec
@@ -83,6 +84,7 @@ bool  debugMode = false;
 bool  pumpAuto  = true;         // false = manual (serial commands)
 bool  pumpAOn   = false;
 bool  pumpBOn   = false;
+bool  tankStop  = false;        // true = tank low, pumps locked OFF
 
 char    cmdBuf[32];
 uint8_t cmdLen = 0;
@@ -226,8 +228,20 @@ void setPump(uint8_t pin, bool &state, bool on)
   }
 }
 
-void updatePumps(float ecValue, float ph)
+void updatePumps(float ecValue, float ph, bool levelLow)
 {
+  // dry-run protection: overrides auto AND manual (only once tank is calibrated)
+  bool stop = tankCalibrated && levelLow;
+  if (stop != tankStop) {
+    tankStop = stop;
+    Serial.println(stop ? "# Tank LOW - pumps stopped" : "# Tank OK - pumps allowed");
+  }
+  if (stop) {
+    setPump(PUMP_A_PIN, pumpAOn, false);
+    setPump(PUMP_B_PIN, pumpBOn, false);
+    return;
+  }
+
   if (!pumpAuto) return;
   bool ecOk = !ecBelowRange && !isnan(ecValue) && ecValue >= EC_MIN && ecValue <= EC_MAX;
   bool phOk = !isnan(ph) && ph >= PH_MIN && ph <= PH_MAX;
@@ -317,6 +331,10 @@ void handleCommand(char* cmd)
              !strcmp(cmd, "PUMPBON") || !strcmp(cmd, "PUMPBOFF")) {
     pumpAuto = false;
     bool on = !strcmp(cmd + 5, "ON");
+    if (on && tankStop) {
+      Serial.println("# Pump blocked: tank LOW. Refill first");
+      on = false;
+    }
     if (cmd[4] == 'A') setPump(PUMP_A_PIN, pumpAOn, on);
     else               setPump(PUMP_B_PIN, pumpBOn, on);
     Serial.println("# Pump MANUAL mode (send pumpauto to return to auto)");
@@ -412,7 +430,7 @@ void loop()
     computeLevel(dist, levelCm, levelPct);
     bool levelLow = !isnan(levelPct) && levelPct < LOW_LEVEL_PCT;
 
-    updatePumps(ecValue, ph);
+    updatePumps(ecValue, ph, levelLow);
 
     // ---- JSON line for the Pi ----
     Serial.print('{');

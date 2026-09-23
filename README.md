@@ -129,19 +129,19 @@ Lines starting with `#` or `>>>` are messages, not data.
 
 In `Full_code.ino`, Pump A and Pump B **run until EC and pH both reach the target, then stop**. If either value leaves the target again, both pumps start again.
 
-Targets are set at the top of `Full_code.ino` (**dummy values for now**, exact ranges to be set later):
+Targets are set at the top of `Full_code.ino`. Pumps run when EC **or** pH is **lower or higher** than the target, and stop when both are inside. Auto mode is on at boot.
 ```cpp
-#define EC_MIN  1.0      // mS/cm
-#define EC_MAX  1.6
+#define EC_MIN  1.2      // mS/cm
+#define EC_MAX  1.8      // mS/cm
 #define PH_MIN  5.5
 #define PH_MAX  6.5
 ```
 
 | EC | pH | Pump A + Pump B |
 |---|---|---|
-| Not at target | any | **ON** |
-| any | Not at target | **ON** |
-| At target | At target | **OFF** (target reached) |
+| Lower than 1.2 **or** higher than 1.8 | any | **ON** |
+| any | Lower than 5.5 **or** higher than 6.5 | **ON** |
+| 1.2 – 1.8 mS/cm | 5.5 – 6.5 | **OFF** (target reached) |
 | `ec_low` = `true` (EC below ~0.6) | any | **ON** (counted as under target) |
 | any | pH reading invalid | **OFF** (safety) |
 | any | any, **tank low** | **OFF** (see below) |
@@ -363,7 +363,7 @@ git push
 
 | Parameter | Range |
 |---|---|
-| EC | 1.0 – 1.6 mS/cm (seedlings 0.5 – 1.0) |
+| EC | 1.2 – 1.8 mS/cm (seedlings 0.5 – 1.0) |
 | pH | 5.5 – 6.5 |
 
 ---
@@ -378,7 +378,7 @@ git push
 - [ ] React dashboard (live cards + history charts)
 - [ ] Camera AI (MaixVision) for leaf colour/size, publishing to `hydro/vision`
 - [x] Relay test: Pump A and Pump B (`Relay_Test/`)
-- [ ] Pump A / Pump B auto control: run until EC + pH reach target, then stop (in `Full_code`, dummy targets for now)
+- [x] Pump A / Pump B auto control: run until EC 1.2–1.8 mS/cm and pH 5.5–6.5, then stop (in `Full_code`)
 - [x] Tank low pump stop (dry-run protection, in `Full_code`)
 - [ ] Grow light control via relay
 - [ ] RTC battery for correct offline timestamps

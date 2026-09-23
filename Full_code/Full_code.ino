@@ -15,8 +15,8 @@
  * Lines starting with '#' or '>>>' are messages, not data.
  *
  * Pumps (auto): Pump A + Pump B run until EC AND pH both reach the target
- *   (EC_MIN..EC_MAX and PH_MIN..PH_MAX), then stop. They start again when
- *   either one leaves the target. Bad pH reading -> OFF.
+ *   (EC 1.2-1.8 mS/cm and pH 5.5-6.5), then stop. They start again when
+ *   either one goes lower or higher than the target. Auto mode at boot. Bad pH reading -> OFF.
  *   Tank low (level_low, once tank is calibrated) -> both OFF, even in manual.
  *
  * Serial commands (115200, line ending = Newline):
@@ -46,9 +46,9 @@
 
 // ---------- Pump control ----------
 #define RELAY_ACTIVE_LOW true   // most relay modules: LOW = ON. Set false if reversed
-// DUMMY ranges - replace with the exact values later
-#define EC_MIN         1.0      // mS/cm
-#define EC_MAX         1.6
+// Target ranges: pumps run while EC or pH is below/above, stop when both inside
+#define EC_MIN         1.2      // mS/cm
+#define EC_MAX         1.8      // mS/cm
 #define PH_MIN         5.5
 #define PH_MAX         6.5
 

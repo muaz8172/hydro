@@ -36,7 +36,7 @@ hydro/
 | DHT22 (air temp/humidity) | DATA / VCC / GND | GPIO15 / 3.3V / GND | 10k pull-up if the module has none |
 | EC sensor (EC V2.1) | A0 / VCC / GND | GPIO34 / **3.3V** / GND | T1 unconnected |
 | pH sensor (PH-4502C) | Po / V+ / G | GPIO35 via divider / **5V** / GND | Do, To unconnected |
-| HC-SR04 (water level) | *planned* | *planned* | Echo needs a 1k + 2k divider |
+| HC-SR04 (water level) | TRIG / ECHO / VCC / GND | GPIO32 / GPIO33 via divider / **5V** / GND | Mounted above the tank, facing down |
 | 2-channel relay (Pump A / Pump B) | IN1 / IN2 / VCC / GND | GPIO25 / GPIO26 / **5V** / GND | Active LOW; GND shared with ESP32 |
 
 **pH voltage divider (required).** The PH-4502C runs on 5V and its output can exceed 3.3V:
@@ -47,6 +47,16 @@ Po --[10k]--+-- GPIO35
           [20k]
             |
 GND --------+
+```
+
+**HC-SR04 echo divider (required).** The HC-SR04 runs on 5V, so its ECHO pulse is 5V. TRIG can be driven directly from GPIO32 (3.3V is enough):
+
+```
+ECHO --[1k]--+-- GPIO33
+             |
+           [2k]
+             |
+GND ---------+
 ```
 
 > ⚠️ Never put more than 3.3V on an ESP32 pin.
@@ -72,7 +82,7 @@ The EC library is **not** installed from the Library Manager. Use the patched `D
 4. You should see one JSON line every 2 seconds:
 
 ```json
-{"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":null,"ec_mv":237,"po_mv":2650}
+{"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,"level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,"pump_a":true,"pump_b":true,"pump_auto":true}
 ```
 
 | Field | Meaning |
@@ -81,8 +91,13 @@ The EC library is **not** installed from the Library Manager. Use the patched `D
 | `ec` | Electrical conductivity (mS/cm) |
 | `ec_low` | `true` = signal below the ESP32 ADC floor (EC < ~0.6 mS/cm) |
 | `ph` | pH value |
-| `level` | Water level (`null` until the HC-SR04 is added) |
+| `level` | Water height above the tank bottom (cm), `null` if no echo |
+| `level_pct` | Water level in % (0 = empty, 100 = full, after tank calibration) |
+| `level_low` | `true` = level below 20 % (`LOW_LEVEL_PCT`) |
 | `ec_mv`, `po_mv` | Raw sensor voltages (for debugging/calibration) |
+| `dist_cm` | Raw HC-SR04 distance, sensor → water surface (cm) |
+| `pump_a`, `pump_b` | Pump A / Pump B relay state |
+| `pump_auto` | `true` = pumps in auto (EC/pH) mode, `false` = manual |
 
 Lines starting with `#` or `>>>` are messages, not data.
 
@@ -235,10 +250,21 @@ Expected: ~230 mV in the 1413 buffer, ~2100 mV in the 12.88 buffer. K-values mus
 
 Expected slope ≈ **180 mV/pH**. The right potentiometer only sets the red LED (Do alarm) threshold and does not affect readings.
 
+### Tank level calibration (HC-SR04)
+Mount the sensor above the tank facing straight down, at least **2 cm** above the highest water level (the HC-SR04's minimum range).
+
+| Step | Action | Command |
+|---|---|---|
+| 1 | Tank **empty** | `tankempty` |
+| 2 | Fill the tank to the **MAX** level | `tankfull` |
+| Reset | Back to default values (empty 20 cm, full 5 cm) | `tankreset` |
+
+The difference between empty and full must be at least **3 cm**. Each reading is the median of 5 pings, adjusted for the speed of sound at the DHT22 air temperature.
+
 ### Other commands
 | Command | Action |
 |---|---|
-| `status` | Show stored EC K-values and pH calibration |
+| `status` | Show stored EC K-values, pH and tank calibration, pump state |
 | `debug` | Toggle human-readable readings |
 
 All calibration values are stored in the ESP32's EEPROM and survive reboots.
@@ -313,7 +339,7 @@ git push
 
 - [x] ESP32 firmware: DHT22, EC, pH with calibration
 - [x] USB serial → MQTT bridge on Pi 5
-- [ ] HC-SR04 water level sensor
+- [x] HC-SR04 water level sensor (firmware: TRIG GPIO32, ECHO GPIO33)
 - [ ] DS18B20 water temperature (EC temperature compensation)
 - [ ] FastAPI + SQLite logger (`/api/latest`, `/api/history`)
 - [ ] React dashboard (live cards + history charts)

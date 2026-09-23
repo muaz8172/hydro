@@ -110,6 +110,25 @@ Lines starting with `#` or `>>>` are messages, not data.
 
 > The relays are set OFF *before* the pins become outputs, so the pumps don't kick on at boot. If your module turns ON with HIGH, set `ACTIVE_LOW` to `false`.
 
+### Tank low pump stop (dry-run protection)
+
+In `Full_code.ino`, Pump A and Pump B are **forced OFF when the tank is low**, so they never run dry.
+
+| Condition | Pumps |
+|---|---|
+| `level_low` = `true` (water below `LOW_LEVEL_PCT`, default **20 %**) | **Both OFF**, in auto *and* manual mode |
+| Tank low + `pumpaon` / `pumpbon` | Refused: `# Pump blocked: tank LOW. Refill first` |
+| Tank refilled | **Auto:** back to EC/pH control. **Manual:** stay OFF until switched on again |
+
+Serial messages when it changes:
+```
+# Tank LOW - pumps stopped
+# Tank OK - pumps allowed
+```
+
+> ⚠️ The protection is only active **after the tank is calibrated** (`tankempty` → `tankfull`). Before that, the level uses default distances and could falsely block the pumps.
+> If the HC-SR04 gets no echo (`level` = `null`), the pumps are **not** stopped; they keep following EC/pH.
+
 ---
 
 ## Part 2: Raspberry Pi 5 setup (one time)
@@ -301,5 +320,6 @@ git push
 - [ ] Camera AI (MaixVision) for leaf colour/size, publishing to `hydro/vision`
 - [x] Relay test: Pump A and Pump B (`Relay_Test/`)
 - [ ] Pump A / Pump B auto control from EC + pH range (in `Full_code`, dummy ranges for now)
+- [x] Tank low pump stop (dry-run protection, in `Full_code`)
 - [ ] Grow light control via relay
 - [ ] RTC battery for correct offline timestamps

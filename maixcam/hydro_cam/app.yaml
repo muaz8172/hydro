@@ -1,0 +1,8 @@
+id: hydro_cam
+name: Hydro Cam
+version: 1.0.0
+author: Muaz
+desc: Plant camera for the hydro rack. Shows a live preview and serves photos to the Pi over USB (http://10.122.173.1:8080/snap.jpg).
+files:
+  app.yaml: app.yaml
+  main.py: main.py

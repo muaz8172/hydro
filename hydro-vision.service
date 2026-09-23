@@ -1,0 +1,13 @@
+[Unit]
+Description=Plant camera (MaixCAM) to MQTT
+After=mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+ExecStart=/usr/bin/python3 /home/hydro/hydro/vision.py
+Restart=always
+RestartSec=10
+User=hydro
+
+[Install]
+WantedBy=multi-user.target

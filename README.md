@@ -125,6 +125,39 @@ Lines starting with `#` or `>>>` are messages, not data.
 
 > The relays are set OFF *before* the pins become outputs, so the pumps don't kick on at boot. If your module turns ON with HIGH, set `ACTIVE_LOW` to `false`.
 
+### Pump auto control (EC + pH target)
+
+In `Full_code.ino`, Pump A and Pump B **run until EC and pH both reach the target, then stop**. If either value leaves the target again, both pumps start again.
+
+Targets are set at the top of `Full_code.ino` (**dummy values for now**, exact ranges to be set later):
+```cpp
+#define EC_MIN  1.0      // mS/cm
+#define EC_MAX  1.6
+#define PH_MIN  5.5
+#define PH_MAX  6.5
+```
+
+| EC | pH | Pump A + Pump B |
+|---|---|---|
+| Not at target | any | **ON** |
+| any | Not at target | **ON** |
+| At target | At target | **OFF** (target reached) |
+| `ec_low` = `true` (EC below ~0.6) | any | **ON** (counted as under target) |
+| any | pH reading invalid | **OFF** (safety) |
+| any | any, **tank low** | **OFF** (see below) |
+
+**Manual control** (Serial Monitor or `mosquitto_pub -t hydro/cmd -m "<command>"`):
+
+| Command | Action |
+|---|---|
+| `pumpaon` / `pumpaoff` | Pump A ON / OFF (switches to manual mode) |
+| `pumpbon` / `pumpboff` | Pump B ON / OFF (switches to manual mode) |
+| `pumpauto` | Back to auto (EC + pH target) mode |
+
+The pump state is in every JSON line (`pump_a`, `pump_b`, `pump_auto`), and `status` shows the mode and targets.
+
+> The sensors take time to settle after nutrient is added, so EC/pH can overshoot the target before the pumps stop. If that happens, switch to short timed doses (e.g. 2 s ON, wait 30–60 s, re-check).
+
 ### Tank low pump stop (dry-run protection)
 
 In `Full_code.ino`, Pump A and Pump B are **forced OFF when the tank is low**, so they never run dry.

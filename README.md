@@ -11,6 +11,8 @@ ESP32 --USB serial (115200)--> bridge.py --> Mosquitto (localhost)
                                  +--> data/logs/log_NNNN_<date>_<time>.csv  (new file per connection)
 ```
 
+**Full system guide (PDF):** [`docs/Hydro_System_Guide.pdf`](docs/Hydro_System_Guide.pdf): how it works, what has been built, and how to run it.
+
 ---
 
 ## Repository structure

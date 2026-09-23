@@ -7,6 +7,8 @@ ESP32 --USB serial (115200)--> bridge.py --> Mosquitto (localhost)
                                                |-- hydro/sensors  (sensor data, JSON)
                                                |-- hydro/log      (ESP32 messages)
                                                |-- hydro/cmd      (commands to ESP32)
+                                 |
+                                 +--> data/logs/log_NNNN_<date>_<time>.csv  (new file per connection)
 ```
 
 ---
@@ -16,7 +18,7 @@ ESP32 --USB serial (115200)--> bridge.py --> Mosquitto (localhost)
 ```
 hydro/
 ├── README.md
-├── bridge.py                  # Pi: ESP32 serial -> MQTT bridge
+├── bridge.py                  # Pi: ESP32 serial -> MQTT bridge + CSV session logs
 ├── hydro-bridge.service       # Pi: systemd service for bridge.py
 ├── mosquitto/local.conf       # Pi: local-only Mosquitto config
 ├── udev/99-esp32.rules        # Pi: fixed /dev/esp32 port name
@@ -234,6 +236,16 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now hydro-bridge
 ```
 
+The bridge also logs every reading to CSV. Each time the ESP32 connects (plugged in, Pi
+reboot, or bridge restart) it starts a new file in `data/logs/`, named
+`log_NNNN_<date>_<time>.csv`. The log ID `NNNN` counts up and is also the `log_id` column;
+`row` numbers the readings inside the file. The `data/` folder is ignored by git.
+
+Columns: `log_id, row, time, temp, hum, ec, ec_low, ph, level, level_pct, level_low, dist_cm,
+ec_mv, po_mv, pump_a, pump_b, pump_auto, pump_sample`. Booleans are stored as `1`/`0`, and a
+missing value (`null`, or a field older firmware doesn't send) is an empty cell. Logs made before
+the pump columns were added simply don't have them.
+
 ---
 
 ## Part 3: Running the system
@@ -339,6 +351,14 @@ mosquitto_sub -t 'hydro/#' -v                # everything
 mosquitto_pub -t hydro/cmd -m "status"       # send command to ESP32
 ```
 
+### Session logs (CSV)
+```bash
+ls -lt ~/hydro/data/logs/ | head             # newest logs first
+tail -f "$(ls -t ~/hydro/data/logs/*.csv | head -1)"   # follow the current log
+journalctl -u hydro-bridge | grep '\[log\]'  # when each log was started
+```
+Open a log in LibreOffice Calc / Excel, or preview it with `column -s, -t < data/logs/<file>.csv | less -S`.
+
 ### Serial port
 ```bash
 lsusb                                  # find the ESP32 (10c4:ea60)
@@ -387,7 +407,8 @@ git push
 - [x] USB serial → MQTT bridge on Pi 5
 - [x] HC-SR04 water level sensor (firmware: TRIG GPIO32, ECHO GPIO33)
 - [ ] DS18B20 water temperature (EC temperature compensation)
-- [ ] FastAPI + SQLite logger (`/api/latest`, `/api/history`)
+- [x] CSV session logs (new file per ESP32 connection)
+- [ ] FastAPI (`/api/latest`, `/api/history`)
 - [ ] React dashboard (live cards + history charts)
 - [ ] Camera AI (MaixVision) for leaf colour/size, publishing to `hydro/vision`
 - [x] Relay test: Pump A and Pump B (`Relay_Test/`)

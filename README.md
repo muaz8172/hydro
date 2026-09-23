@@ -38,6 +38,7 @@ hydro/
 | pH sensor (PH-4502C) | Po / V+ / G | GPIO35 via divider / **5V** / GND | Do, To unconnected |
 | HC-SR04 (water level) | TRIG / ECHO / VCC / GND | GPIO32 / GPIO33 via divider / **5V** / GND | Mounted above the tank, facing down |
 | 2-channel relay (Pump A / Pump B) | IN1 / IN2 / VCC / GND | GPIO25 / GPIO26 / **5V** / GND | Active LOW; GND shared with ESP32 |
+| 1-channel relay (sampling pump) | IN / VCC / GND | GPIO27 / **5V** / GND | Active LOW; GND shared with ESP32 |
 
 **pH voltage divider (required).** The PH-4502C runs on 5V and its output can exceed 3.3V:
 
@@ -82,7 +83,7 @@ The EC library is **not** installed from the Library Manager. Use the patched `D
 4. You should see one JSON line every 2 seconds:
 
 ```json
-{"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,"level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,"pump_a":true,"pump_b":true,"pump_auto":true}
+{"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,"level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,"pump_a":true,"pump_b":true,"pump_auto":true,"pump_sample":true}
 ```
 
 | Field | Meaning |
@@ -98,6 +99,7 @@ The EC library is **not** installed from the Library Manager. Use the patched `D
 | `dist_cm` | Raw HC-SR04 distance, sensor → water surface (cm) |
 | `pump_a`, `pump_b` | Pump A / Pump B relay state |
 | `pump_auto` | `true` = pumps in auto (EC/pH) mode, `false` = manual |
+| `pump_sample` | Sampling pump relay state |
 
 Lines starting with `#` or `>>>` are messages, not data.
 
@@ -158,15 +160,26 @@ The pump state is in every JSON line (`pump_a`, `pump_b`, `pump_auto`), and `sta
 
 > The sensors take time to settle after nutrient is added, so EC/pH can overshoot the target before the pumps stop. If that happens, switch to short timed doses (e.g. 2 s ON, wait 30–60 s, re-check).
 
+### Sampling pump (always on)
+
+A separate **1-channel relay on GPIO27** drives the sampling pump. It **runs all the time** from boot (switched on with the first reading, ~2 s after start-up) and is not affected by EC/pH.
+
+| Command | Action |
+|---|---|
+| `sampleoff` | Stop the sampling pump (e.g. for maintenance) |
+| `sampleon` | Start it again |
+
+State is in the JSON (`pump_sample`) and in `status`. If your 1-channel module turns ON with HIGH, set `SAMPLE_ACTIVE_LOW` to `false`.
+
 ### Tank low pump stop (dry-run protection)
 
-In `Full_code.ino`, Pump A and Pump B are **forced OFF when the tank is low**, so they never run dry.
+In `Full_code.ino`, Pump A, Pump B **and the sampling pump** are **forced OFF when the tank is low**, so they never run dry.
 
 | Condition | Pumps |
 |---|---|
 | `level_low` = `true` (water below `LOW_LEVEL_PCT`, default **20 %**) | **Both OFF**, in auto *and* manual mode |
-| Tank low + `pumpaon` / `pumpbon` | Refused: `# Pump blocked: tank LOW. Refill first` |
-| Tank refilled | **Auto:** back to EC/pH control. **Manual:** stay OFF until switched on again |
+| Tank low + `pumpaon` / `pumpbon` / `sampleon` | Refused: `# ... blocked: tank LOW. Refill first` |
+| Tank refilled | **Auto:** back to EC/pH control. **Manual:** stay OFF until switched on again. **Sampling pump:** back ON (unless `sampleoff`) |
 
 Serial messages when it changes:
 ```

@@ -7,23 +7,26 @@
  *   pH      : Po -> 10k/20k divider -> GPIO35, V+ -> 5V, G -> GND
  *   HC-SR04 : TRIG -> GPIO32, ECHO -> 1k/2k divider -> GPIO33, VCC -> 5V, GND -> GND
  *   Relay   : IN1 (Pump A) -> GPIO25, IN2 (Pump B) -> GPIO26, VCC -> 5V, GND -> GND
+ *   Relay 1ch (sampling pump) : IN -> GPIO27, VCC -> 5V, GND -> GND
  *
  * Output (every 2 s, one line):
  *   {"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,
  *    "level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,
- *    "pump_a":true,"pump_b":true,"pump_auto":true}
+ *    "pump_a":true,"pump_b":true,"pump_auto":true,"pump_sample":true}
  * Lines starting with '#' or '>>>' are messages, not data.
  *
  * Pumps (auto): Pump A + Pump B run until EC AND pH both reach the target
  *   (EC 1.2-1.8 mS/cm and pH 5.5-6.5), then stop. They start again when
  *   either one goes lower or higher than the target. Auto mode at boot. Bad pH reading -> OFF.
- *   Tank low (level_low, once tank is calibrated) -> both OFF, even in manual.
+ *   Sampling pump: runs all the time (from boot). sampleoff / sampleon to stop/start.
+ *   Tank low (level_low, once tank is calibrated) -> ALL pumps OFF, even in manual.
  *
  * Serial commands (115200, line ending = Newline):
  *   EC   : enterec -> (1413 buffer) calec -> (12.88 buffer) calec -> exitec
  *   pH   : ph7 (pH 7 buffer) -> ph4 (pH 4 buffer), phreset
  *   Tank : tankempty (tank EMPTY) -> tankfull (tank at MAX level), tankreset
  *   Pump : pumpaon pumpaoff pumpbon pumpboff (manual), pumpauto (back to auto)
+ *          sampleon sampleoff (sampling pump)
  *   status = show calibration values
  *   debug  = toggle human-readable lines
  *
@@ -43,9 +46,11 @@
 #define ECHO_PIN       33
 #define PUMP_A_PIN     25       // relay IN1
 #define PUMP_B_PIN     26       // relay IN2
+#define SAMPLE_PIN     27       // 1-channel relay IN (sampling pump)
 
 // ---------- Pump control ----------
-#define RELAY_ACTIVE_LOW true   // most relay modules: LOW = ON. Set false if reversed
+#define RELAY_ACTIVE_LOW  true  // 2-ch relay (Pump A/B): LOW = ON. Set false if reversed
+#define SAMPLE_ACTIVE_LOW true  // 1-ch relay (sampling): LOW = ON. Set false if reversed
 // Target ranges: pumps run while EC or pH is below/above, stop when both inside
 #define EC_MIN         1.2      // mS/cm
 #define EC_MAX         1.8      // mS/cm
@@ -85,6 +90,8 @@ bool  debugMode = false;
 bool  pumpAuto  = true;         // false = manual (serial commands)
 bool  pumpAOn   = false;
 bool  pumpBOn   = false;
+bool  sampleOn  = false;        // sampling pump relay state
+bool  sampleEnabled = true;     // sampling pump runs all the time unless sampleoff
 bool  tankStop  = false;        // true = tank low, pumps locked OFF
 
 char    cmdBuf[32];
@@ -222,10 +229,12 @@ void saveTankCal()
 // ================= Pumps (relay) =================
 void setPump(uint8_t pin, bool &state, bool on)
 {
-  digitalWrite(pin, (on == RELAY_ACTIVE_LOW) ? LOW : HIGH);
+  bool activeLow = (pin == SAMPLE_PIN) ? SAMPLE_ACTIVE_LOW : RELAY_ACTIVE_LOW;
+  digitalWrite(pin, (on == activeLow) ? LOW : HIGH);
   if (state != on) {
     state = on;
-    Serial.printf("# Pump %c %s\n", pin == PUMP_A_PIN ? 'A' : 'B', on ? "ON" : "OFF");
+    const char* name = pin == PUMP_A_PIN ? "Pump A" : pin == PUMP_B_PIN ? "Pump B" : "Sampling pump";
+    Serial.printf("# %s %s\n", name, on ? "ON" : "OFF");
   }
 }
 
@@ -240,8 +249,11 @@ void updatePumps(float ecValue, float ph, bool levelLow)
   if (stop) {
     setPump(PUMP_A_PIN, pumpAOn, false);
     setPump(PUMP_B_PIN, pumpBOn, false);
+    setPump(SAMPLE_PIN, sampleOn, false);
     return;
   }
+
+  setPump(SAMPLE_PIN, sampleOn, sampleEnabled);  // always on unless sampleoff
 
   if (!pumpAuto) return;
   // ec_low means EC is below the ADC floor -> definitely under target, keep running
@@ -267,6 +279,8 @@ void printStatus()
   Serial.printf("# Pump %s  A=%s B=%s  stop at target EC %.2f-%.2f and pH %.2f-%.2f\n",
                 pumpAuto ? "AUTO" : "MANUAL", pumpAOn ? "ON" : "OFF", pumpBOn ? "ON" : "OFF",
                 EC_MIN, EC_MAX, PH_MIN, PH_MAX);
+  Serial.printf("# Sampling pump %s%s\n", sampleOn ? "ON" : "OFF",
+                sampleEnabled ? "" : "  (disabled by sampleoff)");
 }
 
 void handleCommand(char* cmd)
@@ -341,6 +355,15 @@ void handleCommand(char* cmd)
     else               setPump(PUMP_B_PIN, pumpBOn, on);
     Serial.println("# Pump MANUAL mode (send pumpauto to return to auto)");
 
+  } else if (!strcmp(cmd, "SAMPLEON")) {
+    sampleEnabled = true;
+    if (tankStop) Serial.println("# Sampling pump blocked: tank LOW. Refill first");
+    else          setPump(SAMPLE_PIN, sampleOn, true);
+
+  } else if (!strcmp(cmd, "SAMPLEOFF")) {
+    sampleEnabled = false;
+    setPump(SAMPLE_PIN, sampleOn, false);
+
   } else if (!strcmp(cmd, "PUMPAUTO")) {
     pumpAuto = true;
     Serial.println("# Pump AUTO mode");
@@ -389,6 +412,8 @@ void setup()
   digitalWrite(PUMP_B_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
   pinMode(PUMP_A_PIN, OUTPUT);
   pinMode(PUMP_B_PIN, OUTPUT);
+  digitalWrite(SAMPLE_PIN, SAMPLE_ACTIVE_LOW ? HIGH : LOW);   // OFF until first reading
+  pinMode(SAMPLE_PIN, OUTPUT);
 
   Serial.begin(115200);
   delay(500);
@@ -406,7 +431,7 @@ void setup()
   Serial.println();
   Serial.println("# Hydro ESP32 ready");
   printStatus();
-  Serial.println("# Commands: enterec calec exitec | ph7 ph4 phreset | tankempty tankfull tankreset | pumpaon pumpaoff pumpbon pumpboff pumpauto | status | debug");
+  Serial.println("# Commands: enterec calec exitec | ph7 ph4 phreset | tankempty tankfull tankreset | pumpaon pumpaoff pumpbon pumpboff pumpauto | sampleon sampleoff | status | debug");
 }
 
 void loop()
@@ -450,6 +475,7 @@ void loop()
     Serial.print(",\"pump_a\":");    Serial.print(pumpAOn  ? "true" : "false");
     Serial.print(",\"pump_b\":");    Serial.print(pumpBOn  ? "true" : "false");
     Serial.print(",\"pump_auto\":"); Serial.print(pumpAuto ? "true" : "false");
+    Serial.print(",\"pump_sample\":"); Serial.print(sampleOn ? "true" : "false");
     Serial.println('}');
 
     if (debugMode) {

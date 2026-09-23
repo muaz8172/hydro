@@ -14,8 +14,9 @@
  *    "pump_a":true,"pump_b":true,"pump_auto":true}
  * Lines starting with '#' or '>>>' are messages, not data.
  *
- * Pumps (auto): Pump A + Pump B run only while EC AND pH are both inside
- *   EC_MIN..EC_MAX and PH_MIN..PH_MAX. Otherwise (or bad reading) -> OFF.
+ * Pumps (auto): Pump A + Pump B run until EC AND pH both reach the target
+ *   (EC_MIN..EC_MAX and PH_MIN..PH_MAX), then stop. They start again when
+ *   either one leaves the target. Bad pH reading -> OFF.
  *   Tank low (level_low, once tank is calibrated) -> both OFF, even in manual.
  *
  * Serial commands (115200, line ending = Newline):
@@ -243,9 +244,10 @@ void updatePumps(float ecValue, float ph, bool levelLow)
   }
 
   if (!pumpAuto) return;
+  // ec_low means EC is below the ADC floor -> definitely under target, keep running
   bool ecOk = !ecBelowRange && !isnan(ecValue) && ecValue >= EC_MIN && ecValue <= EC_MAX;
-  bool phOk = !isnan(ph) && ph >= PH_MIN && ph <= PH_MAX;
-  bool run  = ecOk && phOk;
+  bool phOk = ph >= PH_MIN && ph <= PH_MAX;
+  bool run  = !isnan(ph) && !(ecOk && phOk);    // stop once both reach target
   setPump(PUMP_A_PIN, pumpAOn, run);
   setPump(PUMP_B_PIN, pumpBOn, run);
 }
@@ -262,7 +264,7 @@ void printStatus()
                 phV7, phV4, (phV4 - phV7) / 3.0);
   Serial.printf("# Tank empty=%.1fcm  full=%.1fcm%s\n",
                 tankEmptyDist, tankFullDist, tankCalibrated ? "" : "  (NOT calibrated)");
-  Serial.printf("# Pump %s  A=%s B=%s  run when EC %.2f-%.2f and pH %.2f-%.2f\n",
+  Serial.printf("# Pump %s  A=%s B=%s  stop at target EC %.2f-%.2f and pH %.2f-%.2f\n",
                 pumpAuto ? "AUTO" : "MANUAL", pumpAOn ? "ON" : "OFF", pumpBOn ? "ON" : "OFF",
                 EC_MIN, EC_MAX, PH_MIN, PH_MAX);
 }

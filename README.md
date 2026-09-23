@@ -345,7 +345,7 @@ git push
 - [ ] React dashboard (live cards + history charts)
 - [ ] Camera AI (MaixVision) for leaf colour/size, publishing to `hydro/vision`
 - [x] Relay test: Pump A and Pump B (`Relay_Test/`)
-- [ ] Pump A / Pump B auto control from EC + pH range (in `Full_code`, dummy ranges for now)
+- [ ] Pump A / Pump B auto control: run until EC + pH reach target, then stop (in `Full_code`, dummy targets for now)
 - [x] Tank low pump stop (dry-run protection, in `Full_code`)
 - [ ] Grow light control via relay
 - [ ] RTC battery for correct offline timestamps

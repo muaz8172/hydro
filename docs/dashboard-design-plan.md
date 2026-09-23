@@ -225,7 +225,13 @@ So A and B are not short timed doses: in auto they can run for minutes. The card
 
 ## 7. Plant vision: size, growth stage and health (runs on the Pi 5)
 
-> **Status: later phase.** No dataset has been collected yet (2026-09-23). Build the rest of the dashboard first. Until `vision.py` exists, the Plant card shows a "Camera not set up" empty state and the Graphs tab hides the stage strip, so nothing breaks while vision is missing.
+> **Status (2026-09-23):** the camera and `vision.py` are **running** with a leaf-colour health check (README Part 5). The size and stage **models** are still a later phase: there's no dataset yet. Until they exist, the Plant card shows photo, health, canopy % and yellow %, and hides size and stage. If `hydro/vision/status` is `offline`, the card shows "Camera offline" instead of a stale result.
+
+### What exists now
+- **Camera:** Sipeed MaixCAM on the Pi's USB (a USB network link, camera at `10.122.173.1`). The `hydro_cam` app on the camera serves `/snap.jpg`, and `vision.py` on the Pi fetches a live photo every 10 s and saves one every 15 min (or on `snap` sent to `hydro/vision/cmd`). A first static page, `dashboard/index.html`, already shows it live.
+- **MQTT:** `hydro/vision` (JSON result: `canopy_pct`, `yellow_pct`, `greenness`, `health`, `health_reasons`), `hydro/vision/image` (the JPEG itself, retained, so the Plant card can show it straight from MQTT as a Blob URL before `api.py` exists), `hydro/vision/status` (`online` / `offline: …`).
+- **Storage:** `data/vision/YYYY-MM-DD/HH-MM-SS.jpg` plus `data/vision/vision_log.csv`.
+- **Later:** the MaixCAM has an NPU, so the size and stage models could run on the camera itself (a MaixCAM `.cvimodel`/`.mud` export) instead of NCNN on the Pi. Decide once the dataset exists.
 
 ### What the dataset gives, and what it doesn't
 The dataset has two labels per image:
@@ -254,14 +260,14 @@ Classification is simpler and faster. If the camera sees several plants, detecti
 2. **Split by plant or by date, not by random image**: photos of the same plant in both train and test inflate the accuracy. Use 70 / 20 / 10.
 3. Check the class balance. If one class has less than half of the others' images, add augmentation (flip, rotate, brightness ±20 %) or more photos.
 4. Train: `yolo classify train model=yolo11n-cls.pt data=ml/dataset/size imgsz=224 epochs=60` (and the same for `stage`).
-5. **Add 50–100 photos from your own Pi camera** under your grow light to the training set, split across the classes. A model trained only on internet or lab photos often fails on a new camera and new light.
+5. **Add 50–100 photos from your own MaixCAM** (the saved `data/vision/` photos) under your grow light to the training set, split across the classes. A model trained only on internet or lab photos often fails on a new camera and new light.
 6. Accept a model when test top-1 accuracy is ≥ 90 % and no class falls below 80 % in the confusion matrix.
 7. Export for the Pi: `yolo export model=best.pt format=ncnn`. NCNN is the fastest CPU runtime on the Pi 5. Copy the exported folder to `ml/models/size_ncnn_model/` and `ml/models/stage_ncnn_model/`.
 
 Rough Pi 5 speed (CPU, NCNN): a 224 px classifier ≈ 10–30 ms, and a 640 px nano detector ≈ 100–250 ms. At one check every 15 minutes, the load is negligible.
 
 ### Camera
-- **Pi Camera Module 3** on the CSI port (via `picamera2`), or a USB webcam (via OpenCV). Mount it at a **fixed height and angle** over the rack, so "Large" means the same thing every day.
+- **Sipeed MaixCAM** over USB (see above). Mount it at a **fixed height and angle** over the rack, so "Large" means the same thing every day. Use the live preview on its screen to aim it and check focus.
 - Take photos only while the grow light is on. Lock the white balance and exposure in `vision.py` so colour stays comparable over time.
 
 ### `vision.py` (new systemd service, `hydro-vision.service`)
@@ -327,7 +333,7 @@ data/vision/               # photos + vision_log.csv (already ignored under data
 ```
 Browser ──ws://pi:9001──► Mosquitto  (live: hydro/sensors incl. pump states, hydro/log, hydro/vision; send: hydro/cmd)
                               ▲
-Pi camera ──► vision.py ──────┘ publishes hydro/vision · writes data/vision/
+MaixCAM (USB) ──► vision.py ─┘ publishes hydro/vision · writes data/vision/
    │
    └──http://pi:8000────► FastAPI api.py ──read-only──► data/logs/log_NNNN_*.csv
                            ├─ GET /api/latest               (readings + actuators)
@@ -428,8 +434,8 @@ hydro-api.service
 - Whether A and B should dose in timed pulses instead of running until target (avoids overshoot while sensors settle).
 - What the sampling pump feeds (sensor chamber? tank loop?), for its card's subtitle.
 - The dataset's format (class folders or bounding boxes) and number of images per class.
-- Which camera (Pi Camera Module 3 or USB), and where it's mounted.
+- ~~Which camera~~: decided (Sipeed MaixCAM over USB). Still open: where it's mounted.
 - The sowing/transplant date per batch, and the expected age for each stage.
 - Whether to collect Healthy/Unhealthy photos for a Phase 2 health model.
-- What the README's MaixVision camera plan becomes. This plan runs vision on the Pi 5 instead.
+- Whether the size/stage models run on the MaixCAM's NPU or on the Pi 5 (NCNN).
 - Whether the dashboard should ever control the pumps (a later phase; needs the MQTT auth above first).

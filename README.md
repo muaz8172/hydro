@@ -20,6 +20,11 @@ hydro/
 ├── README.md
 ├── bridge.py                  # Pi: ESP32 serial -> MQTT bridge + CSV session logs
 ├── hydro-bridge.service       # Pi: systemd service for bridge.py
+├── vision.py                  # Pi: plant camera -> leaf colour check -> MQTT + photos
+├── hydro-vision.service       # Pi: systemd service for vision.py
+├── maixcam/hydro_cam/         # MaixCAM app (runs ON the camera): preview + photo server
+├── dashboard/                 # Pi: live dashboard page (camera photo + sensors over MQTT)
+├── hydro-dashboard.service    # Pi: serves dashboard/ on port 8000
 ├── mosquitto/local.conf       # Pi: local-only Mosquitto config
 ├── udev/99-esp32.rules        # Pi: fixed /dev/esp32 port name
 ├── Relay_Test/Relay_Test.ino  # ESP32: 2-channel relay test (Pump A / Pump B)
@@ -331,6 +336,85 @@ All calibration values are stored in the ESP32's EEPROM and survive reboots.
 
 ---
 
+## Part 5: Plant camera (Sipeed MaixCAM)
+
+The MaixCAM is its own small Linux computer. Plugged into the Pi by USB-C it shows up as a
+**USB network adapter**, and NetworkManager gets an address from it automatically:
+
+| | Address |
+|---|---|
+| MaixCAM (over USB) | `10.122.173.1` |
+| Pi (over USB) | `10.122.173.100` (DHCP from the MaixCAM) |
+
+```
+MaixCAM  hydro_cam app ──http://10.122.173.1:8080/snap.jpg──► vision.py (Pi)
+                                                                 ├─ data/vision/YYYY-MM-DD/HH-MM-SS.jpg
+                                                                 ├─ data/vision/vision_log.csv
+                                                                 └─ MQTT hydro/vision, hydro/vision/image, hydro/vision/status
+```
+
+### 1. Install the camera app (one time)
+The app shows a live preview on the MaixCAM screen (use it to aim at the lettuce) and serves a
+fresh 640×480 JPEG to the Pi. It only answers the USB network (`10.122.x.x`), not WiFi.
+```bash
+scp -r ~/hydro/maixcam/hydro_cam root@10.122.173.1:/maixapp/apps/     # password: root
+ssh root@10.122.173.1 'echo hydro_cam > /maixapp/auto_start.txt && reboot'
+curl http://10.122.173.1:8080/status                                    # after ~30 s
+```
+`auto_start.txt` makes the MaixCAM open the app at boot. To go back to the normal menu, delete
+that file (or use Settings → Auto start on the MaixCAM).
+
+> ⚠️ Don't run `python3 main.py` over SSH while the MaixCAM menu is running. Both try to use the
+> camera and the driver hangs until a reboot. Start it from the menu, from MaixVision, or by auto-start.
+>
+> ⚠️ Change the MaixCAM's default password (`ssh root@10.122.173.1`, then `passwd`). It is also on WiFi.
+
+### 2. Run the Pi side
+```bash
+python3 ~/hydro/vision.py --once                  # test: one photo, prints the result
+sudo cp ~/hydro/hydro-vision.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hydro-vision
+```
+It takes a **live photo every 10 s** (`HYDRO_VISION_INTERVAL`), checks it and publishes it for
+the dashboard. Only every **15 min** (`HYDRO_VISION_SAVE_INTERVAL`) is a photo also saved to disk
+and the CSV; saving every 10 s would be ~150 MB a day. To save one now:
+`mosquitto_pub -t hydro/vision/cmd -m snap` (or **Save photo now** on the dashboard).
+
+### 3. What it reports
+```json
+{"ts": 1790161885, "image": "2026-09-23/07-11-25.jpg", "canopy_pct": 34.2,
+ "yellow_pct": 3.1, "greenness": 0.41, "health": "healthy", "health_reasons": []}
+```
+
+| Field | Meaning |
+|---|---|
+| `canopy_pct` | Share of the photo that is plant (a rough size measure), `null` if no plant |
+| `yellow_pct` | Yellow/brown share of the plant area |
+| `greenness` | Excess-green index of the plant pixels, -1…1 (higher = greener) |
+| `health` | `healthy`, `check` (yellow > 8 %), `unhealthy` (yellow > 20 %), `no_plant` (< 2 % green in view) |
+
+This is a **leaf colour rule, not an AI model** (there is no lettuce dataset yet). Keep the camera
+at a fixed spot and take photos under the grow light so results compare day to day. The colour
+bands, thresholds and `ROI` (crop to the tray) are at the top of `vision.py`.
+
+`hydro/vision/image` carries the JPEG itself (retained), so the dashboard can show the latest
+photo straight from MQTT. `hydro/vision/status` is `online` or `offline: <reason>`.
+
+### 4. Dashboard
+A first dashboard page shows the live camera photo with its health result, plus the sensor
+readings and pump states from the ESP32. It gets everything live from Mosquitto's websocket
+listener (port 9001) and needs no internet (`mqtt.js` is in `dashboard/vendor/`).
+```bash
+sudo cp ~/hydro/hydro-dashboard.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hydro-dashboard
+```
+Open **http://localhost:8000** on the Pi, or `http://<pi-ip>:8000` from a phone on the same
+network. This is the first step toward the full React dashboard in `docs/dashboard-design-plan.md`.
+
+---
+
 ## Important commands (cheat sheet)
 
 ### Bridge service
@@ -389,6 +473,9 @@ git push
 | `Buffer Solution Error` (EC) | Check `ec_mv` against the expected buffer voltages |
 | `Failed, K out of range` (EC) | Re-check wiring/probe; note the K value shown |
 | DHT `temp`/`hum` = `null` | Check the DHT22 wiring and pull-up resistor |
+| `hydro/vision/status` = `offline: …` | `ping 10.122.173.1`; check the USB-C cable and that the MaixCAM shows the Hydro Cam preview |
+| MaixCAM stuck / SSH commands hang | Camera driver hung (two programs used the camera). Reboot the MaixCAM |
+| `health: no_plant` | Camera not aimed at the plants, lens out of focus, or grow light off |
 
 ---
 
@@ -409,8 +496,10 @@ git push
 - [ ] DS18B20 water temperature (EC temperature compensation)
 - [x] CSV session logs (new file per ESP32 connection)
 - [ ] FastAPI (`/api/latest`, `/api/history`)
-- [ ] React dashboard (live cards + history charts)
-- [ ] Camera AI (MaixVision) for leaf colour/size, publishing to `hydro/vision`
+- [x] First dashboard page: live camera photo + sensors + pumps (`dashboard/`)
+- [ ] React dashboard (history charts, calibration wizards)
+- [x] Plant camera (MaixCAM over USB): photos + leaf colour health check, publishing to `hydro/vision`
+- [ ] Camera AI model for size / growth stage (needs a lettuce dataset)
 - [x] Relay test: Pump A and Pump B (`Relay_Test/`)
 - [x] Pump A / Pump B auto control: run until EC 1.2–1.8 mS/cm and pH 5.5–6.5, then stop (in `Full_code`)
 - [x] Tank low pump stop (dry-run protection, in `Full_code`)

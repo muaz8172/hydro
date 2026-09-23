@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hydro Dashboard</title>
+<meta name="description" content="Live plant camera and sensor readings for the lettuce hydroponic rack.">
+<!-- Offline: no CDNs. mqtt.js is vendored in ./vendor -->
+<script src="vendor/mqtt.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --card: #ffffff;
+    --line: #e4e2da;
+    --line-strong: #d4d1c7;
+    --text: #1b1d19;
+    --muted: #595e54;
+    --faint: #6c7166;
+    --good: #1d7f46;
+    --warn: #9a5b00;
+    --bad: #b42318;
+    --active: #2f6bb8;
+    --active-soft: #e6eefa;
+    --band: rgba(74, 115, 39, 0.28);
+    --radius: 14px;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "DejaVu Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .page {
+    height: 100vh;
+    display: flex; flex-direction: column; gap: 16px;
+    padding: 20px 24px 24px;
+  }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand b { font-size: 18px; }
+  .brand span { color: var(--muted); }
+  .conn { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+  .dot.ok { background: var(--good); }
+  .dot.bad { background: var(--bad); }
+
+  main {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 16px;
+  }
+  .left { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; gap: 16px; min-height: 0; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    min-width: 0;
+  }
+  h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .sub { font-size: 12.5px; color: var(--faint); }
+
+  /* sensor tiles */
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 16px; min-height: 0; }
+  .tile { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
+  .tile .top { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+  .tile .top .num { font-size: 11.5px; color: var(--faint); }
+  .value { font-size: clamp(34px, 3.4vw, 56px); font-weight: 500; line-height: 1; letter-spacing: -0.02em; }
+  .value small { font: 400 14px system-ui, sans-serif; color: var(--muted); margin-left: 5px; letter-spacing: 0; }
+  .meter { position: relative; height: 14px; }
+  .meter .track { position: absolute; left: 0; right: 0; top: 5px; height: 4px; border-radius: 2px; background: var(--line); }
+  .meter .band { position: absolute; top: 5px; height: 4px; border-radius: 2px; background: var(--band); }
+  .meter .mark { position: absolute; top: 1px; width: 2.5px; height: 12px; border-radius: 1px; background: var(--text); transform: translateX(-50%); }
+  .status { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--faint); min-height: 18px; }
+  .status svg { flex-shrink: 0; }
+  .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .stale { opacity: 0.45; filter: grayscale(1); }
+
+  /* pumps */
+  .pumps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .pump { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
+  .pump .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px;
+    border-radius: 999px; font: 600 12.5px var(--mono); letter-spacing: 0.06em;
+    border: 1.5px solid var(--line-strong); color: var(--muted); background: var(--card);
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; box-sizing: border-box; }
+  .pill.on { background: var(--active); border-color: var(--active); color: #fff; }
+  .pill.on::before { background: #fff; border-color: #fff; }
+  .pill.mode { background: var(--text); border-color: var(--text); color: #fff; }
+  .pill.mode::before { display: none; }
+  .pill.unknown { border-style: dashed; }
+  .pill.unknown::before { display: none; }
+
+  /* data card */
+  .raw { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 24px; font-size: 13px; }
+  .raw div { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--line); }
+  .raw span:first-child { color: var(--muted); }
+
+  /* camera */
+  .camera { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .camera .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .photo {
+    position: relative; flex: 1; min-height: 0;
+    border-radius: 12px; overflow: hidden;
+    background: #ecebe5; border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .photo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .photo .empty { color: var(--faint); font-size: 14px; text-align: center; padding: 24px; }
+  .photo .stamp {
+    position: absolute; left: 12px; bottom: 12px;
+    padding: 5px 10px; border-radius: 8px;
+    background: rgba(27, 29, 25, 0.72); color: #fff; font: 12px var(--mono);
+  }
+  .verdict { display: flex; align-items: center; gap: 10px; }
+  .verdict b { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .fact { display: flex; flex-direction: column; gap: 2px; }
+  .fact span { font-size: 12.5px; color: var(--muted); }
+  .fact .num { font-size: 20px; }
+  .reasons { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); min-height: 18px; }
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  button {
+    min-height: 40px; padding: 0 16px; border-radius: 10px;
+    font: 500 14px system-ui, sans-serif; color: var(--text);
+    background: #f1f0eb; border: 1px solid var(--line-strong); cursor: pointer;
+    transition: transform 120ms ease, background-color 150ms ease;
+  }
+  button:hover { background: #e9e7e0; }
+  button:active { transform: scale(0.97); }
+  button:focus-visible { outline: 2px solid var(--active); outline-offset: 2px; }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  @media (max-width: 1100px) {
+    .page { height: auto; min-height: 100vh; padding: 16px; }
+    main { grid-template-columns: minmax(0, 1fr); }
+    .photo { min-height: 260px; aspect-ratio: 4 / 3; flex: none; }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
+    .pumps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .raw { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    header { flex-wrap: wrap; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4a7327" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 21V10"/><path d="M12 13c-4 0-7-3-7-8 4 0 7 3 7 8z"/><path d="M12 11c0-4 3-7 7-7 0 4-3 7-7 7z"/></svg>
+      <b>Hydro</b><span>· Lettuce rack</span>
+    </div>
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+      <span class="conn"><span class="dot" id="dot-mqtt"></span><span id="txt-mqtt">Connecting…</span></span>
+      <span class="conn"><span class="dot" id="dot-esp"></span><span id="txt-esp">ESP32: waiting</span></span>
+      <span class="conn"><span class="dot" id="dot-cam"></span><span id="txt-cam">Camera: waiting</span></span>
+    </div>
+  </header>
+
+  <main>
+    <div class="left">
+      <section class="tiles" aria-label="Sensor readings" id="tiles"></section>
+      <section class="pumps" aria-label="Pumps" id="pumps"></section>
+      <section class="card" aria-label="Raw values">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <h2>Latest reading</h2><span class="sub num" id="raw-meta">—</span>
+        </div>
+        <div class="raw" id="raw"></div>
+      </section>
+    </div>
+
+    <section class="card camera" aria-label="Plant camera">
+      <div class="head">
+        <h2>Plant camera</h2>
+        <span class="sub">MaixCAM · live every 10 s · colour check, not AI</span>
+      </div>
+      <div class="photo" id="photo">
+        <div class="empty" id="photo-empty">Waiting for the first photo…<br><span class="sub">Is <span class="num">vision.py</span> running?</span></div>
+        <img id="photo-img" alt="Latest photo of the lettuce from the plant camera" hidden>
+        <span class="stamp" id="photo-stamp" hidden></span>
+      </div>
+      <div class="verdict" id="verdict"><b>—</b></div>
+      <div class="facts">
+        <div class="fact"><span>Plant in view</span><b class="num" id="f-canopy">—</b></div>
+        <div class="fact"><span>Yellow / brown leaf</span><b class="num" id="f-yellow">—</b></div>
+        <div class="fact"><span>Greenness</span><b class="num" id="f-green">—</b></div>
+      </div>
+      <ul class="reasons" id="reasons"></ul>
+      <div class="foot">
+        <span class="sub" id="saved">Saved to disk every 15 min</span>
+        <button type="button" id="snap" disabled>Save photo now</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+"use strict";
+const STALE_MS = 10000;          // sensor data older than this -> tile greys out
+const CAM_STALE_MS = 30000;      // camera photo older than this -> "Camera: no new photo"
+
+// Target bands (must match EC_MIN/EC_MAX/PH_MIN/PH_MAX in Full_code.ino)
+const SENSORS = [
+  { key: "ph",        label: "pH",          unit: "",      band: [5.5, 6.5], scale: [4.5, 7.5], dec: 2 },
+  { key: "ec",        label: "EC",          unit: "mS/cm", band: [1.2, 1.8], scale: [0.6, 2.4], dec: 2 },
+  { key: "level_pct", label: "Water level", unit: "%",     band: [20, 100],  scale: [0, 100],   dec: 0 },
+  { key: "temp",      label: "Air temp",    unit: "°C",    band: [18, 26],   scale: [14, 30],   dec: 1 },
+  { key: "hum",       label: "Humidity",    unit: "%",     band: [50, 75],   scale: [30, 90],   dec: 1 },
+];
+const PUMPS = [
+  { key: "pump_a",      name: "Nutrient A", role: "Runs with B until EC/pH in target" },
+  { key: "pump_b",      name: "Nutrient B", role: "Runs with A until EC/pH in target" },
+  { key: "pump_sample", name: "Sampling",   role: "Always on" },
+];
+const RAW = ["ec_mv", "po_mv", "dist_cm", "level", "log_id", "row"];
+
+const ICON = {
+  check: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>',
+  up:    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12L12 4M6 4h6v6"/></svg>',
+  alert: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5l6 11H2z"/><path d="M8 7v3M8 12v.01"/></svg>',
+  dash:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 8h8"/></svg>',
+  lock:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>',
+};
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+
+// ---------- build static structure once ----------
+const tileEls = {};
+for (const s of SENSORS) {
+  const t = el("div", "card tile");
+  t.innerHTML = `
+    <div class="top"><span>${s.label}</span><span class="num">${s.band[0]}–${s.band[1]}</span></div>
+    <div class="value num">—<small>${s.unit}</small></div>
+    <div class="meter" aria-hidden="true"><div class="track"></div><div class="band"></div><div class="mark" hidden></div></div>
+    <div class="status">${ICON.dash}<span>No data</span></div>`;
+  const [lo, hi] = s.scale;
+  const pct = (v) => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
+  const band = t.querySelector(".band");
+  band.style.left = pct(s.band[0]) + "%";
+  band.style.width = (pct(s.band[1]) - pct(s.band[0])) + "%";
+  tileEls[s.key] = { root: t, value: t.querySelector(".value"), mark: t.querySelector(".mark"), status: t.querySelector(".status"), pct };
+  $("tiles").appendChild(t);
+}
+// sixth tile slot: pump mode
+const modeCard = el("div", "card pump");
+modeCard.innerHTML = `<div class="row"><h2>Pump mode</h2><span class="pill unknown" id="mode-pill">—</span></div>
+  <div class="sub">A + B stop at EC 1.2–1.8 · pH 5.5–6.5</div>
+  <div class="status" id="tank-status">${ICON.dash}<span>Tank: no data</span></div>`;
+$("tiles").appendChild(modeCard);
+
+const pumpEls = {};
+for (const p of PUMPS) {
+  const c = el("div", "card pump");
+  c.innerHTML = `<div class="row"><div><h2>${p.name}</h2><div class="sub">${p.role}</div></div><span class="pill unknown">—</span></div>
+    <div class="sub num since">No status yet</div>`;
+  pumpEls[p.key] = { pill: c.querySelector(".pill"), since: c.querySelector(".since"), on: null, t: 0 };
+  $("pumps").appendChild(c);
+}
+// fourth pump slot: camera snapshot count / info
+const infoCard = el("div", "card pump");
+infoCard.innerHTML = `<div class="row"><div><h2>Session</h2><div class="sub">bridge.py CSV log</div></div></div>
+  <div class="sub num" id="session">—</div>`;
+$("pumps").appendChild(infoCard);
+
+const rawEls = {};
+for (const k of RAW) {
+  const d = el("div", null, `<span>${k}</span><span class="num">—</span>`);
+  rawEls[k] = d.lastChild;
+  $("raw").appendChild(d);
+}
+
+// ---------- helpers ----------
+function fmtAgo(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return s + " s";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + " min " + (s % 60) + " s";
+  return Math.floor(m / 60) + " h " + (m % 60) + " min";
+}
+function setStatus(node, cls, icon, text) {
+  node.className = "status " + (cls || "");
+  node.innerHTML = ICON[icon] + "<span></span>";
+  node.lastChild.textContent = text;
+}
+function setDot(id, state, text) {
+  $("dot-" + id).className = "dot " + (state || "");
+  $("txt-" + id).textContent = text;
+}
+
+// ---------- sensors ----------
+let lastSensorAt = 0;
+function onSensors(d) {
+  lastSensorAt = Date.now();
+  for (const s of SENSORS) {
+    const t = tileEls[s.key];
+    const v = d[s.key];
+    t.root.classList.remove("stale");
+    if (v == null || Number.isNaN(v)) {
+      t.value.firstChild.nodeValue = "—";
+      t.mark.hidden = true;
+      setStatus(t.status, "", "dash", s.key === "level_pct" ? "No echo: check sensor" : "No reading");
+      continue;
+    }
+    if (s.key === "ec" && d.ec_low) {
+      t.value.firstChild.nodeValue = "< 0.6";
+      t.mark.hidden = true;
+      setStatus(t.status, "", "dash", "Below sensor floor");
+      continue;
+    }
+    t.value.firstChild.nodeValue = Number(v).toFixed(s.dec);
+    t.mark.hidden = false;
+    t.mark.style.left = t.pct(v) + "%";
+    const [lo, hi] = s.band, edge = (hi - lo) * 0.1;
+    if (s.key === "level_pct" && d.level_low) setStatus(t.status, "bad", "alert", "Tank low: pumps stopped");
+    else if (v < lo) setStatus(t.status, "bad", "alert", "Low");
+    else if (v > hi) setStatus(t.status, "bad", "alert", "High");
+    else if (s.key !== "level_pct" && v > hi - edge) setStatus(t.status, "warn", "up", "Drifting high");
+    else if (s.key !== "level_pct" && v < lo + edge) setStatus(t.status, "warn", "up", "Drifting low");
+    else setStatus(t.status, "good", "check", "In range");
+  }
+
+  // pumps
+  for (const p of PUMPS) {
+    const e = pumpEls[p.key];
+    const on = d[p.key];
+    if (on == null) { e.pill.className = "pill unknown"; e.pill.textContent = "—"; e.since.textContent = "Not in ESP32 data (old firmware?)"; e.on = null; continue; }
+    if (on !== e.on) { e.t = e.on == null ? 0 : Date.now(); e.on = on; }   // t=0: state from before page load
+    e.pill.className = "pill" + (on ? " on" : "");
+    e.pill.textContent = on ? "ON" : "OFF";
+  }
+  const mp = $("mode-pill");
+  if (d.pump_auto == null) { mp.className = "pill unknown"; mp.textContent = "—"; }
+  else { mp.className = "pill mode"; mp.textContent = d.pump_auto ? "AUTO" : "MANUAL"; }
+  if (d.level_low) setStatus($("tank-status"), "bad", "lock", "Tank low: all pumps stopped");
+  else if (d.level_pct == null) setStatus($("tank-status"), "", "dash", "Tank level unknown");
+  else setStatus($("tank-status"), "good", "check", "Tank OK · dry-run stop armed");
+
+  for (const k of RAW) rawEls[k].textContent = d[k] == null ? "—" : String(d[k]);
+  $("raw-meta").textContent = d.ts ? new Date(d.ts * 1000).toLocaleTimeString() : "—";
+  $("session").textContent = d.log_id != null ? `log #${String(d.log_id).padStart(4, "0")} · row ${d.row}` : "—";
+}
+
+// ---------- camera ----------
+let photoUrl = null, lastPhotoAt = 0, camStatus = "waiting";
+const HEALTH = {
+  healthy:   { cls: "good", icon: "check", text: "Healthy" },
+  check:     { cls: "warn", icon: "alert", text: "Check leaves" },
+  unhealthy: { cls: "bad",  icon: "alert", text: "Unhealthy" },
+  no_plant:  { cls: "",     icon: "dash",  text: "No plant in view" },
+};
+function onImage(bytes) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+  const img = $("photo-img");
+  img.onload = () => { if (photoUrl && photoUrl !== url) URL.revokeObjectURL(photoUrl); photoUrl = url; };
+  img.src = url;
+  img.hidden = false;
+  $("photo-empty").hidden = true;
+}
+function onResult(r) {
+  lastPhotoAt = r.ts ? r.ts * 1000 : Date.now();
+  const h = HEALTH[r.health] || { cls: "", icon: "dash", text: r.health };
+  const v = $("verdict");
+  v.className = "verdict " + h.cls;
+  v.innerHTML = ICON[h.icon].replace('width="14" height="14"', 'width="24" height="24"') + "<b></b>";
+  v.lastChild.textContent = h.text;
+  $("f-canopy").textContent = r.canopy_pct == null ? "—" : r.canopy_pct.toFixed(1) + " %";
+  $("f-yellow").textContent = r.yellow_pct == null ? "—" : r.yellow_pct.toFixed(1) + " %";
+  $("f-green").textContent  = r.greenness == null ? "—" : r.greenness.toFixed(2);
+  const ul = $("reasons"); ul.textContent = "";
+  for (const reason of r.health_reasons || []) ul.appendChild(el("li")).textContent = reason;
+  if (r.image) $("saved").textContent = "Last saved: " + r.image;
+}
+
+// ---------- MQTT over websockets (Mosquitto listener 9001) ----------
+const client = mqtt.connect(`ws://${location.hostname || "localhost"}:9001`, { reconnectPeriod: 2000, clientId: "dash-" + Math.random().toString(16).slice(2, 8) });
+client.on("connect", () => {
+  setDot("mqtt", "ok", "MQTT connected");
+  client.subscribe(["hydro/sensors", "hydro/vision", "hydro/vision/image", "hydro/vision/status"]);
+  $("snap").disabled = false;
+});
+client.on("close", () => { setDot("mqtt", "bad", "MQTT disconnected"); $("snap").disabled = true; });
+client.on("message", (topic, payload) => {
+  try {
+    if (topic === "hydro/vision/image") return onImage(payload);
+    const text = new TextDecoder().decode(payload);
+    if (topic === "hydro/sensors") onSensors(JSON.parse(text));
+    else if (topic === "hydro/vision") onResult(JSON.parse(text));
+    else if (topic === "hydro/vision/status") camStatus = text;
+  } catch (e) { console.warn(topic, e); }
+});
+$("snap").addEventListener("click", () => {
+  client.publish("hydro/vision/cmd", "snap");
+  const b = $("snap"); b.textContent = "Saving…"; b.disabled = true;
+  setTimeout(() => { b.textContent = "Save photo now"; b.disabled = !client.connected; }, 3000);
+});
+
+// ---------- 1 s clock: ages, stale states ----------
+setInterval(() => {
+  const now = Date.now();
+  // ESP32
+  if (!lastSensorAt) setDot("esp", "", "ESP32: no data yet");
+  else if (now - lastSensorAt > STALE_MS) {
+    setDot("esp", "bad", "ESP32: no data for " + fmtAgo(now - lastSensorAt));
+    for (const s of SENSORS) tileEls[s.key].root.classList.add("stale");
+    for (const p of PUMPS) { const e = pumpEls[p.key]; e.pill.className = "pill unknown"; e.pill.textContent = "—"; e.since.textContent = "No status from ESP32"; }
+  } else {
+    setDot("esp", "ok", "ESP32 live · " + fmtAgo(now - lastSensorAt) + " ago");
+    for (const p of PUMPS) {
+      const e = pumpEls[p.key];
+      if (e.on == null) continue;
+      e.since.textContent = e.t ? (e.on ? "running " : "off for ") + fmtAgo(now - e.t)
+                                : (e.on ? "running" : "off") + " since before page opened";
+    }
+  }
+  // camera
+  const stamp = $("photo-stamp");
+  if (lastPhotoAt) {
+    stamp.hidden = false;
+    stamp.textContent = new Date(lastPhotoAt).toLocaleTimeString() + " · " + fmtAgo(now - lastPhotoAt) + " ago";
+  }
+  const photo = $("photo");
+  if (camStatus.startsWith("offline")) { setDot("cam", "bad", "Camera offline"); photo.classList.add("stale"); }
+  else if (lastPhotoAt && now - lastPhotoAt > CAM_STALE_MS) { setDot("cam", "bad", "Camera: no new photo for " + fmtAgo(now - lastPhotoAt)); photo.classList.add("stale"); }
+  else if (lastPhotoAt) { setDot("cam", "ok", "Camera live"); photo.classList.remove("stale"); }
+  else setDot("cam", "", "Camera: waiting");
+}, 1000);
+</script>
+</body>
+</html>

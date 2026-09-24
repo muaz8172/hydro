@@ -26,6 +26,7 @@ hydro/
 ├── hydro-vision.service       # Pi: systemd service for vision.py
 ├── maixcam/hydro_cam/         # MaixCAM app (runs ON the camera): preview + photo server
 ├── dashboard/                 # Pi: live dashboard page (camera photo + sensors over MQTT)
+├── dataset/lettuce_growth_stages/  # Lettuce photos by growth stage (seedling / vegetative / matured)
 ├── hydro-dashboard.service    # Pi: serves dashboard/ on port 8000
 ├── mosquitto/local.conf       # Pi: local-only Mosquitto config
 ├── udev/99-esp32.rules        # Pi: fixed /dev/esp32 port name
@@ -396,7 +397,8 @@ and the CSV; saving every 10 s would be ~150 MB a day. To save one now:
 | `greenness` | Excess-green index of the plant pixels, -1…1 (higher = greener) |
 | `health` | `healthy`, `check` (yellow > 8 %), `unhealthy` (yellow > 20 %), `no_plant` (< 2 % green in view) |
 
-This is a **leaf colour rule, not an AI model** (there is no lettuce dataset yet). Keep the camera
+This is a **leaf colour rule, not an AI model**. A first growth-stage dataset is now in the repo
+(section 5 below). Keep the camera
 at a fixed spot and take photos under the grow light so results compare day to day. The colour
 bands, thresholds and `ROI` (crop to the tray) are at the top of `vision.py`.
 
@@ -416,6 +418,21 @@ Open **http://localhost:8000** on the Pi, or `http://<pi-ip>:8000` from a phone 
 network. If the browser can't reach MQTT on port 9001 (the header shows "Live link
 down"), the camera photo still updates through `dashboard/live/` (a link to `data/vision/live/`,
 which `vision.py` rewrites every 10 s). Sensor tiles need the MQTT link. This is the first step toward the full React dashboard in `docs/dashboard-design-plan.md`.
+
+### 5. Plant image dataset
+`dataset/lettuce_growth_stages/` holds **41 lettuce photos sorted by growth stage**, for training a
+growth-stage model later:
+
+| Stage | Photos |
+|---|---|
+| `seedling/` | 18 |
+| `vegetative/` | 6 |
+| `matured/` | 17 |
+
+The folder name is the label. `labels.csv` lists each photo with its stage, format, size and original
+file name. The photos are JPEG, AVIF and WEBP in mixed sizes, so convert and resize them before
+training. The vegetative class is small; add more photos (including ones from `data/vision/`) first.
+See [`dataset/lettuce_growth_stages/README.md`](dataset/lettuce_growth_stages/README.md).
 
 ---
 
@@ -503,7 +520,8 @@ git push
 - [x] First dashboard page: live camera photo + sensors + pumps (`dashboard/`)
 - [ ] React dashboard (history charts, calibration wizards)
 - [x] Plant camera (MaixCAM over USB): photos + leaf colour health check, publishing to `hydro/vision`
-- [ ] Camera AI model for size / growth stage (needs a lettuce dataset)
+- [x] Lettuce growth-stage image dataset: 41 photos in 3 stages (`dataset/lettuce_growth_stages/`)
+- [ ] Camera AI model for size / growth stage (train on the dataset)
 - [x] Relay test: Pump A and Pump B (`Relay_Test/`)
 - [x] Pump A / Pump B auto control: run until EC 1.2–1.8 mS/cm and pH 5.5–6.5, then stop (in `Full_code`)
 - [x] Tank low pump stop (dry-run protection, in `Full_code`)

@@ -38,11 +38,17 @@ hydro/
 ├── dataset/lettuce_growth_stages/  # Lettuce photos by growth stage (seedling / vegetative / matured)
 ├── dataset/lettuce_224/       # Same photos as 224x224 JPEG + labels.csv (stage + size)
 ├── docs/                      # Dashboard design plan, system guide PDF
-├── Relay_Test/Relay_Test.ino  # ESP32: 2-channel relay test (Pump A / Pump B)
-└── esp32/hydro_esp32/
-    ├── hydro_esp32.ino        # ESP32 firmware (DHT22 + EC + pH)
-    ├── DFRobot_EC.cpp         # PATCHED EC library (ESP32 fixes)
-    └── DFRobot_EC.h
+├── Circuit Diagram/           # Wiring diagram (EasyEDA project)
+└── firmware/                  # ESP32 sketches (Arduino IDE)
+    ├── Full_code/             #   MAIN firmware: DHT22 + EC + pH + HC-SR04 + pumps -> JSON
+    │   ├── Full_code.ino
+    │   ├── DFRobot_EC.cpp     #   PATCHED EC library (ESP32 fixes)
+    │   └── DFRobot_EC.h
+    ├── Relay_Test/            #   2-channel relay test (Pump A / Pump B)
+    ├── DHT22/                 #   single-sensor test sketches
+    ├── EC_Sensor/
+    ├── PH_Sensor/
+    └── esp32_hydroponic_sensors/   # earlier combined sensor sketch
 ```
 
 ---
@@ -89,13 +95,13 @@ GND ---------+
 - **DHT sensor library** (Adafruit)
 - **Adafruit Unified Sensor**
 
-The EC library is **not** installed from the Library Manager. Use the patched `DFRobot_EC.cpp` / `.h` inside `esp32/hydro_esp32/`. It fixes:
+The EC library is **not** installed from the Library Manager. Use the patched `DFRobot_EC.cpp` / `.h` inside `firmware/Full_code/`. It fixes:
 - a `strupr()` bug that could corrupt memory
 - calibration not surviving a reboot (missing `EEPROM.commit()` on ESP32)
 - `exitec` saving only one calibration point
 
 ### Upload
-1. Open `esp32/hydro_esp32/hydro_esp32.ino` in the Arduino IDE.
+1. Open `firmware/Full_code/Full_code.ino` in the Arduino IDE.
 2. Board: **ESP32 Dev Module**, then upload.
 3. Serial Monitor at **115200 baud**, line ending **Newline**.
 4. You should see one JSON line every 2 seconds:
@@ -125,7 +131,7 @@ Lines starting with `#` or `>>>` are messages, not data.
 
 ### Relay test (Pump A / Pump B) ✅ tested
 
-`Relay_Test/Relay_Test.ino` is a standalone sketch that checks the 2-channel relay module before it goes into the main firmware.
+`firmware/Relay_Test/Relay_Test.ino` is a standalone sketch that checks the 2-channel relay module before it goes into the main firmware.
 
 **Setup:** relay **IN1 → Pump A**, **IN2 → Pump B** (GPIO25 / GPIO26). Only Pump A and Pump B are connected to the relay.
 
@@ -577,8 +583,8 @@ git push
 - [x] Camera AI model for growth stage + size (`backend/models/stage.onnx`, 90 % test accuracy)
 - [ ] More vegetative + own-camera photos, retrain (vegetative recall is 50 %)
 - [ ] MQTT password + ACL for `hydro/cmd`
-- [x] Relay test: Pump A and Pump B (`Relay_Test/`)
-- [x] Pump A / Pump B auto control: run until EC 1.2–1.8 mS/cm and pH 5.5–6.5, then stop (in `Full_code`)
-- [x] Tank low pump stop (dry-run protection, in `Full_code`)
+- [x] Relay test: Pump A and Pump B (`firmware/Relay_Test/`)
+- [x] Pump A / Pump B auto control: run until EC 1.2–1.8 mS/cm and pH 5.5–6.5, then stop (in `firmware/Full_code`)
+- [x] Tank low pump stop (dry-run protection, in `firmware/Full_code`)
 - [ ] Grow light control via relay
 - [ ] RTC battery for correct offline timestamps

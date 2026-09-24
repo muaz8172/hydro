@@ -394,7 +394,7 @@
 const STALE_MS = 10000;          // sensor data older than this -> tile greys out
 const CAM_STALE_MS = 30000;      // camera photo older than this -> "Camera: no new photo"
 
-// Target bands (must match EC_MIN/EC_MAX/PH_MIN/PH_MAX in Full_code.ino)
+// Target bands (must match EC_MIN/EC_MAX/PH_MIN/PH_MAX in firmware/Full_code/Full_code.ino)
 const SENSORS = [
   { key: "ph",        label: "pH",          unit: "",      band: [5.5, 6.5], scale: [4.5, 7.5], dec: 2 },
   { key: "ec",        label: "EC",          unit: "mS/cm", band: [1.2, 1.8], scale: [0.6, 2.4], dec: 2 },

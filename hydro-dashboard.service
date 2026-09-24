@@ -1,9 +1,9 @@
 [Unit]
-Description=Hydro dashboard (static page, live data over MQTT websockets)
+Description=Hydro dashboard (page + history API on :8000, live data over MQTT websockets)
 After=network.target mosquitto.service
 
 [Service]
-ExecStart=/usr/bin/python3 -m http.server 8000 --directory /home/hydro/hydro/dashboard
+ExecStart=/usr/bin/python3 /home/hydro/hydro/dashboard/server.py
 Restart=always
 RestartSec=3
 User=hydro

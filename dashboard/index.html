@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hydro Dashboard</title>
-<meta name="description" content="Live plant camera and sensor readings for the lettuce hydroponic rack.">
-<!-- Offline: no CDNs. mqtt.js is vendored in ./vendor -->
+<meta name="description" content="Live plant camera, sensor readings, history and calibration for the lettuce hydroponic rack.">
+<!-- Offline: no CDNs. mqtt.js and uPlot are vendored in ./vendor -->
 <script src="vendor/mqtt.min.js"></script>
+<script src="vendor/uPlot.iife.min.js"></script>
+<link rel="stylesheet" href="vendor/uPlot.min.css">
 <style>
   :root {
     --bg: #f6f5f1;
     --card: #ffffff;
+    --sunk: #efeee8;
     --line: #e4e2da;
     --line-strong: #d4d1c7;
     --text: #1b1d19;
@@ -22,7 +25,11 @@
     --active: #2f6bb8;
     --active-soft: #e6eefa;
     --band: rgba(74, 115, 39, 0.28);
+    --st-seed: #d6e8bd;
+    --st-veg: #8fbf5c;
+    --st-mat: #3f6a22;
     --radius: 14px;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", "DejaVu Sans Mono", monospace;
   }
   * { box-sizing: border-box; }
@@ -36,13 +43,14 @@
     -webkit-font-smoothing: antialiased;
   }
   .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--sunk); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; }
 
   .page {
     height: 100vh;
     display: flex; flex-direction: column; gap: 16px;
     padding: 20px 24px 24px;
   }
-  header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
   .brand { display: flex; align-items: center; gap: 10px; }
   .brand b { font-size: 18px; }
   .brand span { color: var(--muted); }
@@ -51,8 +59,25 @@
   .dot.ok { background: var(--good); }
   .dot.bad { background: var(--bad); }
 
+  /* segmented control (tabs, ranges) with a sliding pill */
+  .seg { position: relative; display: inline-flex; padding: 3px; background: var(--sunk); border: 1px solid var(--line); border-radius: 11px; }
+  .seg button {
+    position: relative; z-index: 1; min-height: 38px; padding: 0 18px; border: 0; background: none;
+    font: 500 14px system-ui, sans-serif; color: var(--muted); border-radius: 8px; cursor: pointer;
+    transition: color 150ms ease;
+  }
+  .seg button:hover { background: none; }
+  .seg button:active { transform: none; }
+  .seg button[aria-selected="true"] { color: var(--text); }
+  .seg .ind {
+    position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 0; border-radius: 8px;
+    background: var(--card); border: 1px solid var(--line-strong);
+    transition: transform 200ms var(--ease-out), width 200ms var(--ease-out);
+  }
+  .seg.small button { min-height: 32px; padding: 0 13px; font-size: 13px; }
+
+  .view { flex: 1; min-height: 0; }
   main {
-    flex: 1; min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
     gap: 16px;
@@ -72,6 +97,7 @@
   /* sensor tiles */
   .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 16px; min-height: 0; }
   .tile { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
+  .tile.link { cursor: pointer; }
   .tile .top { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
   .tile .top .num { font-size: 11.5px; color: var(--faint); }
   .value { font-size: clamp(34px, 3.4vw, 56px); font-weight: 500; line-height: 1; letter-spacing: -0.02em; }
@@ -130,18 +156,102 @@
   .fact { display: flex; flex-direction: column; gap: 2px; }
   .fact span { font-size: 12.5px; color: var(--muted); }
   .fact .num { font-size: 20px; }
+  .fact .big { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .fact .big.muted { color: var(--faint); font-weight: 500; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
   .reasons { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); min-height: 18px; }
   .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  button {
-    min-height: 40px; padding: 0 16px; border-radius: 10px;
+  button, .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    min-height: 40px; padding: 0 16px; border-radius: 10px; text-decoration: none;
     font: 500 14px system-ui, sans-serif; color: var(--text);
     background: #f1f0eb; border: 1px solid var(--line-strong); cursor: pointer;
     transition: transform 120ms ease, background-color 150ms ease;
   }
-  button:hover { background: #e9e7e0; }
-  button:active { transform: scale(0.97); }
-  button:focus-visible { outline: 2px solid var(--active); outline-offset: 2px; }
+  button:hover, .btn:hover { background: #e9e7e0; }
+  button:active, .btn:active { transform: scale(0.97); }
+  button:focus-visible, .btn:focus-visible { outline: 2px solid var(--active); outline-offset: 2px; }
   button:disabled { opacity: 0.5; cursor: default; }
+  button:disabled:active { transform: none; }
+  button.primary { background: var(--text); color: #fff; border-color: var(--text); }
+  button.primary:hover:not(:disabled) { background: #33362f; }
+
+  /* ---------- graphs ---------- */
+  #v-graphs { display: flex; flex-direction: column; gap: 14px; }
+  .gtool { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .gtool > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .charts { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .chart { display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 12px 14px 8px; }
+  .chart .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .chart .rd { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; }
+  .chart .rd small { color: var(--faint); font-weight: 400; margin-right: 8px; font-size: 12px; }
+  .plot { flex: 1; min-height: 0; position: relative; }
+  .plot .uplot { position: absolute; inset: 0; }
+  .tablewrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { padding: 7px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--sunk); font-weight: 600; color: var(--muted); }
+  th:first-child, td:first-child { text-align: left; }
+  td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .lanes-card { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; }
+  .lanes { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 7px 14px; align-items: center; font-size: 13px; }
+  .lanes .lb { color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
+  .lanes .lb .num { font-size: 11.5px; color: var(--faint); }
+  .lane { position: relative; height: 18px; border-radius: 4px; background: var(--sunk); overflow: hidden; }
+  .lane svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .lane .xh { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--text); opacity: 0.6; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .hatch { background: repeating-linear-gradient(45deg, #c9c6bc 0 2px, var(--sunk) 2px 5px); }
+  .msg { font-size: 13px; color: var(--muted); }
+
+  /* ---------- calibration ---------- */
+  #v-calibration { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; }
+  .cal-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
+  .pick {
+    display: flex; flex-direction: column; align-items: stretch; gap: 4px; text-align: left; width: 100%;
+    min-height: 0; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    font: inherit; color: inherit;
+  }
+  .pick:hover { background: var(--card); border-color: var(--line-strong); }
+  .pick[aria-pressed="true"] { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+  .pick .row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .pick b { font-size: 15px; }
+  .stored { font: 12px/1.6 var(--mono); color: var(--muted); background: var(--sunk); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 44px; }
+  .hold { position: relative; overflow: hidden; }
+  .hold .fill { position: absolute; inset: 0; background: var(--bad); clip-path: inset(0 100% 0 0); transition: clip-path 200ms ease-out; pointer-events: none; }
+  .hold.holding .fill { clip-path: inset(0 0 0 0); transition: clip-path 2s linear; }
+  .hold .lbl { position: relative; }
+  .hold.holding .lbl { color: #fff; }
+
+  .wiz { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: auto; }
+  .steps { display: flex; gap: 6px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
+  .steps li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--sunk); }
+  .steps li .n { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 600 12px var(--mono); border: 1.5px solid var(--line-strong); background: var(--card); }
+  .steps li.cur { color: var(--text); background: var(--card); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .steps li.cur .n { border-color: var(--text); }
+  .steps li.done { color: var(--good); }
+  .steps li.done .n { background: var(--good); border-color: var(--good); color: #fff; }
+  .stepbody { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px; }
+  .instr { display: flex; flex-direction: column; gap: 12px; }
+  .instr h3 { margin: 0; font-size: 21px; letter-spacing: -0.01em; }
+  .instr ol { margin: 0; padding-left: 20px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  .readout { display: flex; flex-direction: column; gap: 10px; background: var(--sunk); border-radius: 12px; padding: 14px 16px; }
+  .readout .big { font: 500 48px/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .readout .big small { font: 400 15px system-ui, sans-serif; color: var(--muted); margin-left: 6px; }
+  .spark { height: 46px; }
+  .spark svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .gate .track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-bottom: 6px; }
+  .gate .track i { display: block; height: 100%; width: 0; background: var(--warn); border-radius: 3px; transition: width 300ms ease, background-color 200ms ease; }
+  .gate.ok .track i { background: var(--good); }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .replies { font: 12.5px/1.6 var(--mono); background: #1d201b; color: #d9dccf; border-radius: 10px; padding: 10px 12px; min-height: 110px; max-height: 240px; overflow: auto; }
+  .replies div { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .replies .me { color: #9fc3ec; }
+  .replies .tm { color: #8a8f80; margin-right: 8px; }
+  .notice { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13.5px; padding: 10px 12px; border-radius: 10px; background: #fbf3e6; color: var(--warn); }
+  .notice.bad { background: #fbeceb; color: var(--bad); }
+  .notice.good { background: #e8f3ec; color: var(--good); }
 
   @media (max-width: 1100px) {
     .page { height: auto; min-height: 100vh; padding: 16px; }
@@ -150,7 +260,11 @@
     .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
     .pumps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .raw { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    header { flex-wrap: wrap; }
+    .charts { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: 240px; }
+    .tablewrap { max-height: 70vh; }
+    #v-calibration { grid-template-columns: minmax(0, 1fr); }
+    .stepbody { grid-template-columns: minmax(0, 1fr); }
+    .lanes { grid-template-columns: 120px minmax(0, 1fr); }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
@@ -164,6 +278,12 @@
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4a7327" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 21V10"/><path d="M12 13c-4 0-7-3-7-8 4 0 7 3 7 8z"/><path d="M12 11c0-4 3-7 7-7 0 4-3 7-7 7z"/></svg>
       <b>Hydro</b><span>· Lettuce rack</span>
     </div>
+    <div class="seg" role="tablist" aria-label="Dashboard pages" id="tabs">
+      <span class="ind" aria-hidden="true"></span>
+      <button type="button" role="tab" id="tab-overview" aria-controls="v-overview" aria-selected="true">Overview</button>
+      <button type="button" role="tab" id="tab-graphs" aria-controls="v-graphs" aria-selected="false">Graphs</button>
+      <button type="button" role="tab" id="tab-calibration" aria-controls="v-calibration" aria-selected="false">Calibration</button>
+    </div>
     <div style="display:flex; gap:20px; flex-wrap:wrap;">
       <span class="conn"><span class="dot" id="dot-mqtt"></span><span id="txt-mqtt">Connecting…</span></span>
       <span class="conn"><span class="dot" id="dot-esp"></span><span id="txt-esp">ESP32: waiting</span></span>
@@ -171,7 +291,8 @@
     </div>
   </header>
 
-  <main>
+  <!-- ======================= OVERVIEW ======================= -->
+  <main class="view" id="v-overview" role="tabpanel" aria-labelledby="tab-overview">
     <div class="left">
       <section class="tiles" aria-label="Sensor readings" id="tiles"></section>
       <section class="pumps" aria-label="Pumps" id="pumps"></section>
@@ -186,7 +307,7 @@
     <section class="card camera" aria-label="Plant camera">
       <div class="head">
         <h2>Plant camera</h2>
-        <span class="sub">MaixCAM · live every 10 s · colour check, not AI</span>
+        <span class="sub">MaixCAM · live every 10 s · colour check + stage model</span>
       </div>
       <div class="photo" id="photo">
         <div class="empty" id="photo-empty">Waiting for the first photo…<br><span class="sub">Is <span class="num">vision.py</span> running?</span></div>
@@ -194,6 +315,11 @@
         <span class="stamp" id="photo-stamp" hidden></span>
       </div>
       <div class="verdict" id="verdict"><b>—</b></div>
+      <div class="facts">
+        <div class="fact"><span>Growth stage</span><b class="big muted" id="f-stage">—</b></div>
+        <div class="fact"><span>Size</span><b class="big muted" id="f-size">—</b></div>
+        <div class="fact"><span>Model confidence</span><b class="num" id="f-conf">—</b></div>
+      </div>
       <div class="facts">
         <div class="fact"><span>Plant in view</span><b class="num" id="f-canopy">—</b></div>
         <div class="fact"><span>Yellow / brown leaf</span><b class="num" id="f-yellow">—</b></div>
@@ -206,6 +332,61 @@
       </div>
     </section>
   </main>
+
+  <!-- ======================= GRAPHS ======================= -->
+  <section class="view" id="v-graphs" role="tabpanel" aria-labelledby="tab-graphs" hidden>
+    <div class="gtool">
+      <div>
+        <div class="seg small" role="tablist" aria-label="Time range" id="ranges">
+          <span class="ind" aria-hidden="true"></span>
+          <button type="button" role="tab" data-r="1h" aria-selected="false">1 h</button>
+          <button type="button" role="tab" data-r="24h" aria-selected="true">24 h</button>
+          <button type="button" role="tab" data-r="7d" aria-selected="false">7 d</button>
+        </div>
+        <span class="sub num" id="range-note"></span>
+      </div>
+      <div>
+        <span class="msg" id="g-msg"></span>
+        <button type="button" id="btn-table" aria-pressed="false">Table</button>
+        <a class="btn" id="btn-csv" href="api/export.csv?range=24h" download>Download CSV</a>
+      </div>
+    </div>
+    <div class="charts" id="charts"></div>
+    <div class="tablewrap" id="table-area" hidden><table id="tbl"></table></div>
+    <section class="card lanes-card" aria-label="Pumps and plant stage">
+      <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <h2>Pumps &amp; plant stage</h2>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--active)"></i>Pump ON</span>
+          <span><i class="swatch" style="background:var(--st-seed)"></i>Seedling · Small</span>
+          <span><i class="swatch" style="background:var(--st-veg)"></i>Vegetative · Medium</span>
+          <span><i class="swatch" style="background:var(--st-mat)"></i>Matured · Large</span>
+          <span><i class="swatch hatch"></i>Uncertain</span>
+        </div>
+      </div>
+      <div class="lanes" id="lanes"></div>
+    </section>
+  </section>
+
+  <!-- ======================= CALIBRATION ======================= -->
+  <section class="view" id="v-calibration" role="tabpanel" aria-labelledby="tab-calibration" hidden>
+    <div class="cal-list">
+      <button type="button" class="pick" data-w="ec" aria-pressed="true"><span class="row"><b>EC probe</b><span class="sub num">~5 min</span></span><span class="sub">Needs 1413 µS/cm and 12.88 mS/cm buffers</span></button>
+      <button type="button" class="pick" data-w="ph" aria-pressed="false"><span class="row"><b>pH probe</b><span class="sub num">~10 min</span></span><span class="sub">Needs pH 7 and pH 4 buffers</span></button>
+      <button type="button" class="pick" data-w="tank" aria-pressed="false"><span class="row"><b>Tank level</b><span class="sub num">~15 min</span></span><span class="sub">Drain to MIN, then fill to MAX</span></button>
+      <div class="card" style="display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><h2>Stored calibration</h2><button type="button" id="btn-status" style="min-height:34px">Read from ESP32</button></div>
+        <div class="stored" id="stored">Not read yet.</div>
+        <div class="sub">The ESP32's reply to <code>status</code>.</div>
+      </div>
+      <div class="card" style="display:flex; flex-direction:column; gap:8px;">
+        <h2>Reset</h2>
+        <div class="sub">Hold for 2 seconds. Sends <code>phreset</code>, which puts pH calibration back to the defaults.</div>
+        <button type="button" class="hold" id="hold-ph"><span class="fill"></span><span class="lbl">Hold to reset pH calibration</span></button>
+      </div>
+    </div>
+    <section class="card wiz" aria-label="Calibration wizard" id="wiz"></section>
+  </section>
 </div>
 
 <script>
@@ -227,6 +408,11 @@ const PUMPS = [
   { key: "pump_sample", name: "Sampling",   role: "Always on" },
 ];
 const RAW = ["ec_mv", "po_mv", "dist_cm", "level", "log_id", "row"];
+const STAGES = {
+  seedling:   { name: "Seedling",   size: "Small",  color: "var(--st-seed)" },
+  vegetative: { name: "Vegetative", size: "Medium", color: "var(--st-veg)" },
+  matured:    { name: "Matured",    size: "Large",  color: "var(--st-mat)" },
+};
 
 const ICON = {
   check: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>',
@@ -237,16 +423,52 @@ const ICON = {
 };
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const SVGNS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs, parent) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+
+// ---------- tabs ----------
+function placeInd(seg) {
+  const cur = seg.querySelector('[aria-selected="true"]'), ind = seg.querySelector(".ind");
+  if (!cur || !ind || !cur.offsetWidth) return;
+  ind.style.width = cur.offsetWidth + "px";
+  ind.style.transform = `translateX(${cur.offsetLeft - 3}px)`;
+}
+function segSelect(seg, btn) {
+  for (const b of seg.querySelectorAll('[role="tab"]')) b.setAttribute("aria-selected", b === btn ? "true" : "false");
+  placeInd(seg);
+}
+let currentTab = "overview";
+function showTab(name) {
+  const btn = $("tab-" + name);
+  if (!btn) return;
+  currentTab = name;
+  segSelect($("tabs"), btn);
+  for (const v of ["overview", "graphs", "calibration"]) $("v-" + v).hidden = v !== name;
+  if (name === "graphs") { placeInd($("ranges")); loadGraphs(); }
+  if (name === "calibration") calOpened();
+  try { history.replaceState(null, "", "#" + name); } catch (e) {}
+}
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest('[role="tab"]'); if (b) showTab(b.id.slice(4)); });
+$("tabs").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const bs = [...$("tabs").querySelectorAll('[role="tab"]')], i = bs.indexOf(document.activeElement);
+  if (i < 0) return;
+  const n = bs[(i + (e.key === "ArrowRight" ? 1 : bs.length - 1)) % bs.length];
+  n.focus(); showTab(n.id.slice(4));
+});
 
 // ---------- build static structure once ----------
 const tileEls = {};
 for (const s of SENSORS) {
-  const t = el("div", "card tile");
+  const t = el("div", "card tile link");
+  t.title = "Open the history for " + s.label;
   t.innerHTML = `
     <div class="top"><span>${s.label}</span><span class="num">${s.band[0]}–${s.band[1]}</span></div>
     <div class="value num">—<small>${s.unit}</small></div>
     <div class="meter" aria-hidden="true"><div class="track"></div><div class="band"></div><div class="mark" hidden></div></div>
     <div class="status">${ICON.dash}<span>No data</span></div>`;
+  t.addEventListener("click", () => showTab("graphs"));
   const [lo, hi] = s.scale;
   const pct = (v) => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
   const band = t.querySelector(".band");
@@ -270,7 +492,7 @@ for (const p of PUMPS) {
   pumpEls[p.key] = { pill: c.querySelector(".pill"), since: c.querySelector(".since"), on: null, t: 0 };
   $("pumps").appendChild(c);
 }
-// fourth pump slot: camera snapshot count / info
+// fourth pump slot: session info
 const infoCard = el("div", "card pump");
 infoCard.innerHTML = `<div class="row"><div><h2>Session</h2><div class="sub">bridge.py CSV log</div></div></div>
   <div class="sub num" id="session">—</div>`;
@@ -305,6 +527,7 @@ function setDot(id, state, text) {
 let lastSensorAt = 0;
 function onSensors(d) {
   lastSensorAt = Date.now();
+  cal.onReading(d);
   for (const s of SENSORS) {
     const t = tileEls[s.key];
     const v = d[s.key];
@@ -371,6 +594,24 @@ function onImage(bytes) {
   img.hidden = false;
   $("photo-empty").hidden = true;
 }
+function showStage(r) {
+  const fs = $("f-stage"), fz = $("f-size"), fc = $("f-conf");
+  const st = STAGES[r.stage];
+  fs.className = "big" + (st ? "" : " muted");
+  fz.className = "big" + (st ? "" : " muted");
+  if (!("stage" in r)) {                       // vision.py without the model
+    fs.textContent = "—"; fz.textContent = "—"; fc.textContent = "model off"; return;
+  }
+  if (st) {
+    fs.innerHTML = `<i class="swatch" style="background:${st.color}"></i><span></span>`;
+    fs.lastChild.textContent = st.name;
+    fz.textContent = st.size;
+  } else {
+    fs.textContent = r.stage === "uncertain" ? "Uncertain" : "—";
+    fz.textContent = "—";
+  }
+  fc.textContent = r.stage_conf == null ? "—" : Math.round(r.stage_conf * 100) + " %";
+}
 function onResult(r) {
   if (r.ts && r.ts * 1000 <= lastPhotoAt) return;          // already showing this one
   lastPhotoAt = r.ts ? r.ts * 1000 : Date.now();
@@ -382,8 +623,10 @@ function onResult(r) {
   $("f-canopy").textContent = r.canopy_pct == null ? "—" : r.canopy_pct.toFixed(1) + " %";
   $("f-yellow").textContent = r.yellow_pct == null ? "—" : r.yellow_pct.toFixed(1) + " %";
   $("f-green").textContent  = r.greenness == null ? "—" : r.greenness.toFixed(2);
+  showStage(r);
   const ul = $("reasons"); ul.textContent = "";
   for (const reason of r.health_reasons || []) ul.appendChild(el("li")).textContent = reason;
+  if (r.stage === "uncertain") ul.appendChild(el("li")).textContent = "Stage model is less than 60 % sure";
   if (r.image) $("saved").textContent = "Last saved: " + r.image;
 }
 
@@ -391,16 +634,18 @@ function onResult(r) {
 const client = mqtt.connect(`ws://${location.hostname || "localhost"}:9001`, { reconnectPeriod: 2000, clientId: "dash-" + Math.random().toString(16).slice(2, 8) });
 client.on("connect", () => {
   setDot("mqtt", "ok", "MQTT connected");
-  client.subscribe(["hydro/sensors", "hydro/vision", "hydro/vision/image", "hydro/vision/status"]);
+  client.subscribe(["hydro/sensors", "hydro/log", "hydro/vision", "hydro/vision/image", "hydro/vision/status"]);
   $("snap").disabled = false;
+  cal.connected();
 });
-client.on("close", () => { setDot("mqtt", "bad", "Live link down (MQTT :9001) · camera via HTTP"); $("snap").disabled = true; });
+client.on("close", () => { setDot("mqtt", "bad", "Live link down (MQTT :9001) · camera via HTTP"); $("snap").disabled = true; cal.render(); });
 client.on("error", (e) => console.warn("MQTT", e));
 client.on("message", (topic, payload) => {
   try {
     if (topic === "hydro/vision/image") return onImage(payload);
     const text = new TextDecoder().decode(payload);
     if (topic === "hydro/sensors") onSensors(JSON.parse(text));
+    else if (topic === "hydro/log") cal.onLog(text);
     else if (topic === "hydro/vision") onResult(JSON.parse(text));
     else if (topic === "hydro/vision/status") camStatus = text;
   } catch (e) { console.warn(topic, e); }
@@ -431,6 +676,450 @@ async function pollLive() {
 setInterval(pollLive, 5000);
 pollLive();
 
+// ================= GRAPHS =================
+const G_SERIES = [
+  { key: "ph",   label: "pH",       unit: "",      band: [5.5, 6.5], scale: [5.0, 7.0], dec: 2 },
+  { key: "ec",   label: "EC",       unit: "mS/cm", band: [1.2, 1.8], scale: [0.8, 2.0], dec: 2 },
+  { key: "temp", label: "Air temp", unit: "°C",    band: [18, 26],   scale: [14, 30],   dec: 1 },
+  { key: "hum",  label: "Humidity", unit: "%",     band: [50, 75],   scale: [40, 85],   dec: 1 },
+];
+const RANGE_NOTE = { "1h": "Last hour · every 2 s", "24h": "Last 24 h · 1-min averages", "7d": "Last 7 days · 10-min averages" };
+const REFRESH_MS = { "1h": 10000, "24h": 60000, "7d": 120000 };
+let gRange = "24h", gTable = false, gHist = null, gAct = null, gVis = null, gTimer = null;
+const charts = {};
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function fmtTime(t) {
+  const d = new Date(t * 1000);
+  const hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return gRange === "7d" ? d.toLocaleDateString([], { weekday: "short" }) + " " + hm : hm;
+}
+function hatch(ctx) {
+  const c = document.createElement("canvas"); c.width = c.height = 8;
+  const x = c.getContext("2d");
+  x.fillStyle = css("--sunk"); x.fillRect(0, 0, 8, 8);
+  x.strokeStyle = "#dcd9cf"; x.lineWidth = 1.2;
+  x.beginPath(); x.moveTo(0, 8); x.lineTo(8, 0); x.stroke();
+  return ctx.createPattern(c, "repeat");
+}
+function buildCharts() {
+  const box = $("charts");
+  for (const s of G_SERIES) {
+    const c = el("section", "card chart");
+    c.setAttribute("aria-label", s.label + " history");
+    c.innerHTML = `<div class="hd"><h2>${s.label}${s.unit ? ` <span class="sub">${s.unit}</span>` : ""}</h2><span class="rd"><small></small><b>—</b></span></div>
+      <div class="plot"></div>`;
+    box.appendChild(c);
+    const plot = c.querySelector(".plot");
+    const opts = {
+      width: 400, height: 200, legend: { show: false },
+      cursor: { sync: { key: "hydro" }, drag: { x: false, y: false }, points: { size: 7, fill: css("--text") }, y: false },
+      scales: {
+        x: { time: true },
+        y: { range: (u, mn, mx) => {
+          const lo = mn == null ? s.scale[0] : Math.min(s.scale[0], mn), hi = mx == null ? s.scale[1] : Math.max(s.scale[1], mx);
+          const pad = (hi - lo) * 0.04; return [lo - pad, hi + pad];
+        } },
+      },
+      axes: [
+        { stroke: css("--faint"), font: "11px " + css("--mono"), grid: { show: false }, ticks: { stroke: css("--line") },
+          values: (u, ts) => ts.map(fmtTime), space: 70 },
+        { stroke: css("--faint"), font: "11px " + css("--mono"), size: 44, grid: { stroke: css("--line"), width: 1 }, ticks: { show: false },
+          values: (u, v) => v.map((x) => x.toFixed(s.dec === 2 ? 1 : 0)) },
+      ],
+      series: [{}, { stroke: css("--text"), width: 1.6, spanGaps: false, points: { show: false } }],
+      hooks: {
+        drawClear: [(u) => drawBackdrop(u, s)],
+        setCursor: [(u) => onCursor(u)],
+      },
+    };
+    const u = new uPlot(opts, [[], []], plot);
+    charts[s.key] = { u, plot, rdT: c.querySelector(".rd small"), rdV: c.querySelector(".rd b"), s };
+    new ResizeObserver(() => { if (plot.clientWidth) u.setSize({ width: plot.clientWidth, height: plot.clientHeight }); }).observe(plot);
+  }
+}
+function drawBackdrop(u, s) {
+  const ctx = u.ctx, { left, top, width, height } = u.bbox;
+  ctx.save();
+  // target band
+  const y1 = u.valToPos(s.band[1], "y", true), y0 = u.valToPos(s.band[0], "y", true);
+  ctx.fillStyle = "rgba(74, 115, 39, 0.14)";
+  ctx.fillRect(left, Math.max(top, y1), width, Math.min(top + height, y0) - Math.max(top, y1));
+  // gaps: runs of empty buckets, hatched and labelled
+  const xs = u.data[0], ys = u.data[1];
+  if (xs && xs.length) {
+    const minRun = gRange === "1h" ? 5 : 3, pat = hatch(ctx);
+    ctx.font = `${11 * devicePixelRatio}px ${css("--mono")}`;
+    let i0 = -1;
+    for (let i = 0; i <= xs.length; i++) {
+      const empty = i < xs.length && ys[i] == null;
+      if (empty && i0 < 0) i0 = i;
+      if (!empty && i0 >= 0) {
+        if (i - i0 >= minRun) {
+          const xa = u.valToPos(xs[i0], "x", true), xb = u.valToPos(xs[i - 1], "x", true);
+          ctx.fillStyle = pat; ctx.fillRect(xa, top, Math.max(2, xb - xa), height);
+          const label = "no data " + fmtTime(xs[i0]) + "–" + (i === xs.length ? "now" : fmtTime(xs[i - 1]));
+          const tw = ctx.measureText(label).width, px = devicePixelRatio;
+          if (xb - xa > tw + 16 * px) {
+            ctx.fillStyle = css("--card"); ctx.fillRect(xa + 4 * px, top + 4 * px, tw + 8 * px, 16 * px);
+            ctx.fillStyle = css("--faint"); ctx.fillText(label, xa + 8 * px, top + 16 * px);
+          }
+        }
+        i0 = -1;
+      }
+    }
+  }
+  ctx.restore();
+}
+function lastIdx(arr) { let i = arr.length - 1; while (i >= 0 && arr[i] == null) i--; return i; }
+function readouts(idx) {
+  for (const k in charts) {
+    const c = charts[k], d = c.u.data;
+    if (!d[0] || !d[0].length) { c.rdT.textContent = ""; c.rdV.textContent = "—"; continue; }
+    const i = idx == null ? lastIdx(d[1]) : idx;
+    if (i < 0) { c.rdT.textContent = ""; c.rdV.textContent = "no data"; continue; }
+    c.rdT.textContent = idx == null ? "latest " + fmtTime(d[0][i]) : fmtTime(d[0][i]);
+    c.rdV.textContent = d[1][i] == null ? "no data" : d[1][i].toFixed(c.s.dec);
+  }
+}
+function onCursor(u) {
+  const i = u.cursor.idx;
+  readouts(i == null ? null : i);
+  const f = i == null || !gHist ? null : (u.data[0][i] - gHist.start) / (gHist.end - gHist.start);
+  for (const xh of document.querySelectorAll("#lanes .xh")) {
+    xh.hidden = f == null;
+    if (f != null) xh.style.left = (f * 100) + "%";
+  }
+}
+function drawLanes() {
+  const box = $("lanes"); box.textContent = "";
+  if (!gHist) return;
+  const start = gHist.start, span = gHist.end - gHist.start;
+  const rows = [["pump_a", "Nutrient A"], ["pump_b", "Nutrient B"], ["pump_sample", "Sampling"], ["stage", "Plant stage"]];
+  for (const [k, name] of rows) {
+    let extra = "";
+    if (k !== "stage" && gAct && gAct.pumps[k]) {
+      const p = gAct.pumps[k], m = p.on_seconds / 60;
+      extra = `${p.count} run${p.count === 1 ? "" : "s"} · ${m < 60 ? Math.round(m) + " min" : (m / 60).toFixed(1) + " h"}`;
+    }
+    const lb = el("div", "lb", `<span>${name}</span><span class="num">${extra}</span>`);
+    const lane = el("div", "lane");
+    box.append(lb, lane);
+    const svg = svgEl("svg", { viewBox: "0 0 1000 18", preserveAspectRatio: "none", "aria-hidden": "true" }, lane);
+    const X = (t) => Math.max(0, Math.min(1000, (t - start) / span * 1000));
+    if (k !== "stage") {
+      for (const r of (gAct && gAct.pumps[k] ? gAct.pumps[k].runs : [])) {
+        svgEl("rect", { x: X(r.start), y: 3, width: Math.max(1.5, X(r.end) - X(r.start)), height: 12, rx: 2, fill: css("--active"), opacity: r.cut ? 0.55 : 1 }, svg);
+      }
+    } else if (gVis) {
+      const defs = svgEl("defs", {}, svg), pat = svgEl("pattern", { id: "lh", width: 5, height: 5, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+      svgEl("rect", { width: 5, height: 5, fill: css("--sunk") }, pat); svgEl("line", { x1: 0, y1: 0, x2: 0, y2: 5, stroke: "#c9c6bc", "stroke-width": 1.5 }, pat);
+      const rows = gVis.rows;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i], next = i + 1 < rows.length ? rows[i + 1].ts : gHist.end;
+        const end = Math.min(next, r.ts + 1800);             // a check covers at most 30 min
+        const fill = STAGES[r.stage] ? STAGES[r.stage].color : r.stage === "uncertain" ? "url(#lh)" : null;
+        if (fill) svgEl("rect", { x: X(r.ts), y: 0, width: Math.max(1.5, X(end) - X(r.ts)), height: 18, fill }, svg);
+      }
+    }
+    const xh = el("div", "xh"); xh.hidden = true; lane.appendChild(xh);
+  }
+}
+function drawTable() {
+  const h = gHist, rows = [];
+  if (h) {
+    for (let i = h.t.length - 1; i >= 0 && rows.length < 400; i--) {
+      if (G_SERIES.every((s) => h[s.key][i] == null)) continue;
+      const f = (v, n) => v == null ? "—" : v.toFixed(n);
+      rows.push(`<tr><td>${esc(new Date(h.t[i] * 1000).toLocaleString())}</td><td>${f(h.ph[i], 2)}</td><td>${f(h.ec[i], 2)}</td><td>${f(h.temp[i], 1)}</td><td>${f(h.hum[i], 1)}</td><td>${f(h.level_pct[i], 0)}</td></tr>`);
+    }
+  }
+  $("tbl").innerHTML = `<thead><tr><th>Time</th><th>pH</th><th>EC mS/cm</th><th>Air °C</th><th>Humidity %</th><th>Water %</th></tr></thead>
+    <tbody>${rows.join("") || '<tr><td colspan="6">No readings in this range.</td></tr>'}</tbody>`;
+}
+function renderGraphs() {
+  $("charts").hidden = gTable; $("table-area").hidden = !gTable;
+  if (gTable) drawTable();
+  else if (gHist) for (const k in charts) charts[k].u.setData([gHist.t, gHist[k]]);
+  drawLanes(); readouts(null);
+}
+async function loadGraphs() {
+  if (!Object.keys(charts).length) buildCharts();
+  clearTimeout(gTimer);
+  $("range-note").textContent = RANGE_NOTE[gRange];
+  $("btn-csv").href = "api/export.csv?range=" + gRange;
+  try {
+    const q = "?range=" + gRange;
+    const [h, a, v] = await Promise.all(["api/history", "api/actuators/history", "api/vision/history"].map(
+      (p) => fetch(p + q, { cache: "no-store" }).then((r) => { if (!r.ok) throw new Error(p + " " + r.status); return r.json(); })));
+    gHist = h; gAct = a; gVis = v;
+    $("g-msg").textContent = "";
+  } catch (e) {
+    console.warn("history", e);
+    $("g-msg").textContent = "History not available: is dashboard/server.py running?";
+  }
+  renderGraphs();
+  if (currentTab === "graphs") gTimer = setTimeout(loadGraphs, REFRESH_MS[gRange]);
+}
+$("ranges").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-r]"); if (!b || b.dataset.r === gRange) return;
+  gRange = b.dataset.r; segSelect($("ranges"), b); loadGraphs();
+});
+$("btn-table").addEventListener("click", (e) => {
+  gTable = !gTable; e.currentTarget.setAttribute("aria-pressed", String(gTable));
+  e.currentTarget.textContent = gTable ? "Charts" : "Table"; renderGraphs();
+});
+
+// ================= CALIBRATION =================
+// Commands go to hydro/cmd (bridge.py forwards them to the ESP32); replies arrive on hydro/log.
+const WIZ = {
+  ec: {
+    title: "EC probe", field: "ec_mv", unit: "mV", minWait: 20, tol: (m) => Math.max(Math.abs(m) * 0.01, 3),
+    exit: "exitec",
+    steps: [
+      { name: "Start", h: "Enter EC calibration mode", how: ["Take the EC probe out of the tank.", "Rinse it with distilled water and dab it dry."],
+        cmd: "enterec", ok: /Enter EC Calibration Mode/i, err: /Command Error/i },
+      { name: "1413 µS/cm", h: "Low buffer: 1413 µS/cm", how: ["Put the probe in the 1413 µS/cm buffer.", "Stir gently once, then keep it still."],
+        cmd: "calec", expect: 230, ok: /Successful,K/i, err: /Buffer Solution Error|Failed|Command Error/i },
+      { name: "12.88 mS/cm", h: "High buffer: 12.88 mS/cm", how: ["Rinse the probe and dab it dry.", "Put it in the 12.88 mS/cm buffer and keep it still."],
+        cmd: "calec", expect: 2100, ok: /Successful,K/i, err: /Buffer Solution Error|Failed|Command Error/i },
+      { name: "Save", h: "Save and exit", how: ["Saves both K values in the ESP32's memory.", "Afterwards, rinse the probe and put it back in the tank."],
+        cmd: "exitec", ok: /Calibration Successful/i, err: /Calibration Failed/i },
+      { name: "Done", h: "EC calibrated", how: ["The new K values are shown under Stored calibration.", "Put the probe back in the tank."], done: true },
+    ],
+  },
+  ph: {
+    title: "pH probe", field: "po_mv", unit: "mV", minWait: 60, tol: () => 5,
+    steps: [
+      { name: "pH 7", h: "Neutral buffer: pH 7", how: ["Rinse the pH probe and put it in the pH 7 buffer.", "Wait for the reading to settle (1–2 min)."],
+        cmd: "ph7", expect: 2500, ok: /pH7 saved/i, err: /pH7 rejected/i },
+      { name: "pH 4", h: "Acid buffer: pH 4", how: ["Rinse the probe and put it in the pH 4 buffer.", "Wait for the reading to settle (1–2 min)."],
+        cmd: "ph4", expectFrom: (c) => c.v7 ? c.v7 + 540 : 3040, ok: /pH4 saved/i, err: /pH4 rejected/i },
+      { name: "Done", h: "Check the slope", how: ["A healthy probe gives about 180 mV per pH unit. Much lower means an old probe or a used-up buffer.", "Rinse the probe and put it back in the tank."], done: true },
+    ],
+  },
+  tank: {
+    title: "Tank level", field: "dist_cm", unit: "cm", minWait: 10, tol: () => 0.5,
+    steps: [
+      { name: "Empty", h: "Tank at MIN level", how: ["Drain the tank to the lowest safe level: the pumps must still be covered.", "Let the water surface go calm."],
+        cmd: "tankempty", ok: /tankempty saved/i, err: /tankempty rejected/i },
+      { name: "Full", h: "Tank at MAX level", how: ["Fill the tank to the MAX line.", "Let the water surface go calm."],
+        cmd: "tankfull", ok: /tankfull saved/i, err: /tankfull rejected/i },
+      { name: "Done", h: "Tank calibrated", how: ["Water level now shows as a percentage.", "Below 20 % the ESP32 stops all pumps (dry-run stop)."], done: true },
+    ],
+  },
+};
+const cal = (() => {
+  let wz = "ec", step = 0, stepAt = Date.now(), samples = [], lastAt = 0, lines = [], pending = null, notice = null, askStop = false, statusGrab = null, opened = false;
+  const ctx = {};                                   // values parsed from replies (v7, slope)
+  const now = () => Date.now();
+  const espLive = () => lastSensorAt && now() - lastSensorAt < STALE_MS;
+  const canSend = () => client.connected && espLive() && !pending && stability().ok;
+  const tstamp = () => new Date().toTimeString().slice(0, 8);
+  const W = () => WIZ[wz], S = () => W().steps[step];
+  const expectOf = (s) => s.expect != null ? s.expect : s.expectFrom ? s.expectFrom(ctx) : null;
+
+  function pushLine(s, me) { lines.push({ t: tstamp(), s, me }); if (lines.length > 80) lines.shift(); }
+  function send(cmd) { client.publish("hydro/cmd", cmd); pushLine(cmd, true); }
+
+  function stability() {
+    const w = W(), s = S();
+    if (s.done || s.name === "Start" || s.name === "Save") return { ok: true, skip: true };
+    const fresh = now() - lastAt < STALE_MS;
+    const win = samples.filter((x) => now() - x.t <= 10000).map((x) => x.v);
+    const waitLeft = Math.max(0, w.minWait - (now() - stepAt) / 1000);
+    if (!fresh) return { ok: false, text: "No readings from the ESP32" };
+    if (win.length < 4) return { ok: false, text: "Collecting readings…", prog: win.length / 4 * 0.3 };
+    const mn = Math.min(...win), mx = Math.max(...win), mean = win.reduce((a, b) => a + b, 0) / win.length;
+    const tol = w.tol(mean), vary = mx - mn, steady = vary <= tol;
+    const fmt = (x) => x.toFixed(w.unit === "cm" ? 1 : 0) + " " + w.unit;
+    if (waitLeft > 0) return { ok: false, text: `Settling: wait ${Math.ceil(waitLeft)} s more · varied ${fmt(vary)} over 10 s`, prog: 1 - waitLeft / w.minWait };
+    if (!steady) return { ok: false, text: `Still moving: varied ${fmt(vary)} over 10 s (needs ≤ ${fmt(tol)})`, prog: 0.9 };
+    return { ok: true, text: `Stable: varied ${fmt(vary)} over the last 10 s` };
+  }
+
+  function render() {
+    const box = $("wiz"); if (!box) return;
+    const w = W(), s = S(), exp = expectOf(s), live = client.connected;
+    const needsReading = !s.done && s.name !== "Start" && s.name !== "Save";
+    box.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+        <h2 style="font-size:17px">${w.title} calibration</h2>
+        <span class="sub">Sends to <code>hydro/cmd</code> · replies from <code>hydro/log</code></span>
+      </div>
+      <ol class="steps">${w.steps.map((x, i) => `<li class="${i < step ? "done" : i === step ? "cur" : ""}"><span class="n">${i < step ? "✓" : i + 1}</span>${x.name}</li>`).join("")}</ol>
+      ${!live ? `<div class="notice bad">MQTT is not connected, so commands can't be sent.</div>`
+        : !espLive() && !s.done ? `<div class="notice bad" id="esp-warn">No data from the ESP32. Check that it's plugged in and the bridge is running.</div>` : ""}
+      <div class="stepbody">
+        <div class="instr">
+          <h3>${s.h}</h3>
+          <ol>${s.how.map((x) => `<li>${x}</li>`).join("")}</ol>
+          ${exp != null ? `<div class="sub">Expected about <b class="num">${exp} ${w.unit}</b>. More than 30 % away usually means the wrong buffer.</div>` : ""}
+          ${s.done && wz === "ph" && ctx.slope != null ? `<div class="notice ${ctx.slope >= 150 && ctx.slope <= 210 ? "good" : ""}">Slope ${ctx.slope.toFixed(1)} mV/pH${ctx.slope >= 150 && ctx.slope <= 210 ? ": looks good" : ": outside 150–210, check the probe and buffers"}</div>` : ""}
+          <div class="actions" id="cal-acts"></div>
+          <div id="cal-notice"></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          ${needsReading ? `<div class="readout">
+            <div style="display:flex; justify-content:space-between; gap:8px;"><span class="sub">Live <code>${w.field}</code></span><span class="sub">Settle at least ${w.minWait} s</span></div>
+            <div class="big" id="cal-rd">—<small>${w.unit}</small></div>
+            <div class="spark" id="cal-spark"></div>
+            <div class="gate" id="cal-gate"><div class="track"><i></i></div><span class="status" id="cal-gate-txt"></span></div>
+            <div class="status warn" id="cal-far" hidden>${ICON.alert}<span>Far from the expected value. Is this the right buffer?</span></div>
+          </div>` : ""}
+          <div><div class="sub" style="margin-bottom:6px">ESP32 replies</div><div class="replies" id="cal-replies"></div></div>
+        </div>
+      </div>`;
+    drawActions(); drawNotice(); drawReplies(); tick();
+  }
+  function drawActions() {
+    const a = $("cal-acts"); if (!a) return;
+    const s = S(), live = client.connected;
+    a.textContent = "";
+    if (s.done) {
+      const b = el("button", "primary", "Start again"); b.type = "button";
+      b.onclick = () => reset(); a.appendChild(b); return;
+    }
+    const b = el("button", "primary"); b.type = "button"; b.id = "cal-send";
+    b.innerHTML = pending ? "Waiting for the ESP32…" : (s.name === "Start" || s.name === "Save" ? "Send " : "Capture · send ") + `<span class="num">${s.cmd}</span>`;
+    b.disabled = !canSend();
+    b.onclick = () => capture();
+    a.appendChild(b);
+    if (step > 0 || (wz === "ec" && lines.some((x) => x.me))) {
+      const c = el("button", null, "Stop"); c.type = "button";
+      c.onclick = () => { askStop = true; drawNotice(); }; a.appendChild(c);
+    }
+  }
+  function drawNotice() {
+    const n = $("cal-notice"); if (!n) return;
+    if (askStop) {
+      const ec = wz === "ec" && step > 0;
+      n.innerHTML = `<div class="notice">${ec ? "Stop? The ESP32 stays in EC calibration mode until it gets exitec. Sending exitec now saves any buffer already captured." : "Stop? Steps already saved on the ESP32 stay saved."}
+        <button type="button" id="stop-yes">${ec ? "Stop and send exitec" : "Stop"}</button><button type="button" id="stop-no">Keep going</button></div>`;
+      $("stop-yes").onclick = () => { if (wz === "ec" && step > 0 && client.connected) send("exitec"); reset(); };
+      $("stop-no").onclick = () => { askStop = false; drawNotice(); };
+      return;
+    }
+    n.innerHTML = notice ? `<div class="notice ${notice.cls}"></div>` : "";
+    if (notice) n.firstChild.textContent = notice.text;
+  }
+  function drawReplies() {
+    const r = $("cal-replies"); if (!r) return;
+    r.innerHTML = lines.length ? lines.map((x) => `<div class="${x.me ? "me" : ""}"><span class="tm">${x.t}</span>${x.me ? "→ " : ""}${esc(x.s)}</div>`).join("")
+      : `<div style="color:#8a8f80">Nothing yet. Replies from the ESP32 appear here.</div>`;
+    r.scrollTop = r.scrollHeight;
+  }
+  function tick() {
+    const s = S(), w = W();
+    const rd = $("cal-rd");
+    if (rd) {
+      const last = samples[samples.length - 1];
+      rd.firstChild.nodeValue = last && now() - lastAt < STALE_MS ? last.v.toFixed(w.unit === "cm" ? 1 : 0) : "—";
+      const st = stability(), g = $("cal-gate");
+      g.classList.toggle("ok", st.ok);
+      g.querySelector("i").style.width = (st.ok ? 100 : (st.prog || 0) * 100) + "%";
+      setStatus($("cal-gate-txt"), st.ok ? "good" : "", st.ok ? "check" : "dash", st.text);
+      const exp = expectOf(s);
+      $("cal-far").hidden = !(exp && last && Math.abs(last.v - exp) / exp > 0.3);
+      drawSpark();
+    }
+    const b = $("cal-send");
+    if (b) b.disabled = !canSend();
+    const warnShown = !!$("esp-warn");
+    if (warnShown === !!espLive() && client.connected && !S().done) render();   // ESP32 came or went
+  }
+  function drawSpark() {
+    const box = $("cal-spark"); if (!box) return;
+    const pts = samples.filter((x) => now() - x.t <= 60000);
+    box.textContent = "";
+    if (pts.length < 2) return;
+    const W_ = box.clientWidth, H = box.clientHeight;
+    const svg = svgEl("svg", { viewBox: `0 0 ${W_} ${H}`, "aria-hidden": "true" }, box);
+    const vs = pts.map((p) => p.v), mn = Math.min(...vs), mx = Math.max(...vs), sp = mx - mn || 1, t0 = now() - 60000;
+    const d = pts.map((p, i) => (i ? "L" : "M") + ((p.t - t0) / 60000 * W_).toFixed(1) + " " + (H - 3 - (p.v - mn) / sp * (H - 6)).toFixed(1)).join("");
+    svgEl("path", { d, fill: "none", stroke: css("--text"), "stroke-width": 1.5 }, svg);
+  }
+  function capture() {
+    const s = S();
+    if (!client.connected || pending) return;
+    notice = null; askStop = false;
+    send(s.cmd);
+    pending = { step: s, timer: setTimeout(() => {
+      pending = null;
+      notice = { cls: "bad", text: "No reply from the ESP32 within 10 s. Is the bridge running and the ESP32 plugged in? Try again." };
+      render();
+    }, 10000) };
+    render();
+  }
+  function onLog(text) {
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim(); if (!line) continue;
+      if (statusGrab && /^# (EC|pH|Tank|Pump)/.test(line)) { statusGrab.push(line); $("stored").textContent = statusGrab.join("\n"); }
+      if (opened) pushLine(line, false);
+      let m;
+      if ((m = line.match(/pH7 saved: Po=(\d+)/))) ctx.v7 = +m[1];
+      if ((m = line.match(/slope=([\d.]+)mV\/pH/))) ctx.slope = +m[1];
+      if (pending) {
+        const s = pending.step;
+        if (s.err.test(line)) {
+          clearTimeout(pending.timer); pending = null;
+          notice = { cls: "bad", text: "The ESP32 rejected it: " + line.replace(/^#\s*/, "") + ". Check the buffer and try again." };
+          render();
+        } else if (s.ok.test(line)) {
+          clearTimeout(pending.timer); pending = null;
+          step++; stepAt = now(); samples = []; notice = null;
+          if (S().done) readStatus();
+          render();
+        }
+      }
+    }
+    if (opened) drawReplies();
+  }
+  function onReading(d) {
+    const v = d[W().field];
+    lastAt = now();
+    if (v != null && !Number.isNaN(v)) { samples.push({ t: lastAt, v: Number(v) }); samples = samples.filter((x) => lastAt - x.t <= 60000); }
+    if (currentTab === "calibration") tick();
+  }
+  function reset() { if (pending) clearTimeout(pending.timer); pending = null; step = 0; stepAt = now(); samples = []; notice = null; askStop = false; render(); }
+  function select(w) { wz = w; lines = []; for (const k in ctx) delete ctx[k]; reset(); }
+  function readStatus() {
+    if (!client.connected) { $("stored").textContent = "MQTT not connected."; return; }
+    statusGrab = []; $("stored").textContent = "Asking the ESP32…";
+    client.publish("hydro/cmd", "status");
+    setTimeout(() => { if (statusGrab && !statusGrab.length) $("stored").textContent = "No reply. Is the ESP32 connected?"; statusGrab = null; }, 4000);
+  }
+  return {
+    render, onLog, onReading, select, readStatus, tick,
+    connected() { render(); if (opened && $("stored").textContent === "Not read yet.") readStatus(); },
+    open() { if (!opened) { opened = true; render(); if (client.connected) readStatus(); } else render(); },
+  };
+})();
+function calOpened() { cal.open(); }
+for (const b of document.querySelectorAll(".pick")) b.addEventListener("click", () => {
+  for (const x of document.querySelectorAll(".pick")) x.setAttribute("aria-pressed", x === b ? "true" : "false");
+  cal.select(b.dataset.w);
+});
+$("btn-status").addEventListener("click", () => cal.readStatus());
+(function holdReset() {
+  const b = $("hold-ph"), lbl = b.querySelector(".lbl"); let t;
+  const down = () => {
+    if (!client.connected) { lbl.textContent = "MQTT not connected"; setTimeout(() => { lbl.textContent = "Hold to reset pH calibration"; }, 2000); return; }
+    b.classList.add("holding");
+    t = setTimeout(() => {
+      b.classList.remove("holding");
+      client.publish("hydro/cmd", "phreset");
+      lbl.textContent = "Sent phreset";
+      setTimeout(() => { lbl.textContent = "Hold to reset pH calibration"; cal.readStatus(); }, 1500);
+    }, 2000);
+  };
+  const up = () => { clearTimeout(t); b.classList.remove("holding"); };
+  b.addEventListener("pointerdown", down);
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, up);
+  b.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); down(); } });
+  b.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") up(); });
+})();
+
 // ---------- 1 s clock: ages, stale states ----------
 setInterval(() => {
   const now = Date.now();
@@ -460,7 +1149,14 @@ setInterval(() => {
   else if (lastPhotoAt && now - lastPhotoAt > CAM_STALE_MS) { setDot("cam", "bad", "Camera: no new photo for " + fmtAgo(now - lastPhotoAt)); photo.classList.add("stale"); }
   else if (lastPhotoAt) { setDot("cam", "ok", "Camera live"); photo.classList.remove("stale"); }
   else setDot("cam", "", "Camera: waiting");
+  if (currentTab === "calibration") cal.tick();            // countdown moves even between readings
 }, 1000);
+
+// ---------- boot ----------
+const first = (location.hash || "").slice(1);
+showTab(["graphs", "calibration"].includes(first) ? first : "overview");
+requestAnimationFrame(() => placeInd($("tabs")));
+window.addEventListener("resize", () => { placeInd($("tabs")); placeInd($("ranges")); });
 </script>
 </body>
 </html>

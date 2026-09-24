@@ -1,10 +1,13 @@
 # Hydro Dashboard: Design Plan
 
 Mockups: https://claude.ai/artifact/WkQEocQ3YATsaeQA4zAjFX (desktop, phone, EC calibration wizard)
+Tab preview (2026-09-24): https://claude.ai/artifact/Ke1uhL6rPhz34KexXA1yyg (Overview, Graphs, Calibration, and what changed in this plan)
 
-A React dashboard for the lettuce hydroponic system. It shows live readings from `hydro/sensors`, the ON/OFF status of the three pumps (nutrient A, nutrient B, sampling), the lettuce's size, growth stage and health from a camera model running on the Pi 5, history from the session CSV logs in `data/logs/`, the ESP32 message log, and guided calibration over `hydro/cmd`.
+> **Status (2026-09-24):** built as a plain HTML page (`dashboard/index.html`) with three tabs, served by `dashboard/server.py`. The growth-stage model is trained and runs in `vision.py`. See section 9 for what's done and what's left.
 
-Skills used: **emil-design-eng** (motion and feel), **dataviz** (charts, color, status), **design-taste-frontend / minimalist-ui** (visual direction), **shadcn** (components), **vercel-react-best-practices** (live-data performance). Run **impeccable** / **web-design-guidelines** as audits once built.
+A dashboard for the lettuce hydroponic system. It shows live readings from `hydro/sensors`, the ON/OFF status of the three pumps (nutrient A, nutrient B, sampling), the lettuce's size, growth stage and health from a camera model running on the Pi 5, history from the session CSV logs in `data/logs/`, the ESP32 message log, and guided calibration over `hydro/cmd`.
+
+Skills used: **emil-design-eng** (motion and feel), **dataviz** (charts, color, status), **design-taste-frontend / minimalist-ui** (visual direction). The original plan used React + shadcn; it was changed to plain HTML on 2026-09-24 (section 8). Run **impeccable** / **web-design-guidelines** as audits once built.
 
 ---
 
@@ -167,6 +170,10 @@ Calibration is the one place where a mistake costs something (bad K-values, wast
 - Closing mid-flow asks for confirmation. A "Reset pH calibration" (`phreset`) button sits behind a hold-to-confirm (2 s linear clip-path fill, 200 ms release; Emil's hold-to-delete pattern).
 - The `status` command is available as a "Show stored calibration" button.
 
+**Tank level (added 2026-09-24):** drain to MIN → stability gate → `tankempty` → fill to MAX → stability gate → `tankfull`. The firmware already supports this, and the dry-run stop (`level_low`) only works once the tank is calibrated. The gate for `dist_cm` uses an absolute tolerance (±0.5 cm), because 1 % of a few cm is below the HC-SR04's noise.
+
+As built: the gates are EC 20 s minimum + ≤ max(1 %, 3 mV) over 10 s, pH 60 s + ≤ 5 mV over 10 s (≈ 0.03 pH), tank 10 s + ≤ 0.5 cm. The capture button also needs live ESP32 data. A step advances only on the firmware's success line (`Successful,K`, `pH7 saved`, `tankfull saved`, …); a rejection line or no reply within 10 s shows an error and keeps the step. "Stop" in the middle of EC calibration offers to send `exitec`, since the ESP32 has no cancel command.
+
 ---
 
 ## 6. Actuators: dosing and sampling pumps
@@ -201,8 +208,9 @@ So A and B are not short timed doses: in auto they can run for minutes. The card
 - **`bridge.py` (done).** The fields travel on `hydro/sensors` as they are. `pump_a`, `pump_b`, `pump_auto` and `pump_sample` are in `LOG_FIELDS`, so every new session CSV records them as `1`/`0`. Logs from before this change have no pump columns.
 - **Safety (firmware, not dashboard).** Relays start OFF at boot, and the tank-low stop protects against dry running. There is **no maximum run time** in the firmware yet: if a sensor fails in a way that still reads valid (e.g. EC probe out of the water reading 0), A and B would dose forever. Recommended: add a max continuous run (or timed pulses: 2 s ON, 30–60 s wait, re-check, as the README suggests). The dashboard only warns ("Pump A/B ON long") and doesn't act.
 
-### `api.py` additions
-- **`GET /api/latest`** gains an `actuators` object, so the page shows pump status right away before MQTT delivers the next reading:
+### History API (`dashboard/server.py`)
+- ✅ **`GET /api/actuators/history?range=24h`** is built (section 8): ON intervals, run count and on-time per pump.
+- Not built yet: **`GET /api/latest`** with an `actuators` object, so the page shows pump status right away before MQTT delivers the next reading:
   ```json
   "actuators": {
     "mode": "auto",
@@ -213,8 +221,8 @@ So A and B are not short timed doses: in auto they can run for minutes. The card
   }
   ```
   `state` is `"on"`, `"off"` or `"unknown"`. It's `"unknown"` when the newest row is older than 10 s, or when a session log was written before the pump columns existed. `since` is the time of the last change, which the page uses for "running 8 s" and "last ran 04:47".
-- **`GET /api/actuators/history?range=24h`** returns ON intervals per pump, `[{"pump":"pump_a","start":…,"end":…}]`, built from the 0→1 and 1→0 changes in the session CSVs. It powers the pump activity lanes. An interval still open at the end of a session file (the ESP32 was unplugged while a pump ran) is closed at the file's last row and flagged `"cut": true`.
-- **Live.** The browser takes pump states directly from `hydro/sensors` over MQTT, the same as the sensor values. `useHydroLive()` keeps `since` per pump by watching for changes.
+- The actuators history is built from the 0→1 and 1→0 changes in the session CSVs. It powers the pump activity lanes. An interval still open at the end of a session file (the ESP32 was unplugged while a pump ran) is closed at the file's last row and flagged `"cut": true`.
+- **Live.** The browser takes pump states directly from `hydro/sensors` over MQTT, the same as the sensor values, and keeps `since` per pump by watching for changes.
 
 ### Dashboard
 - **Pump row.** Three cards between the reading tiles and the history charts: name, role, a large ON/OFF pill, "running 4 m 12 s" or "last ran 04:47 · 3 m", and "today: N runs · total time". A small chip at the end of the row shows the mode (**AUTO** · "stops at EC 1.2–1.8, pH 5.5–6.5", or **MANUAL**) and, when the tank is low, a "Tank low: all pumps stopped" banner. Since A and B always switch together in auto, their cards can share one "Nutrient A + B" header if space is tight.
@@ -223,107 +231,107 @@ So A and B are not short timed doses: in auto they can run for minutes. The card
 
 ---
 
-## 7. Plant vision: size, growth stage and health (runs on the Pi 5)
+## 7. Plant vision: growth stage, size and health (runs on the Pi 5)
 
-> **Status (2026-09-23):** the camera and `vision.py` are **running** with a leaf-colour health check (README Part 5). The size and stage **models** are still a later phase: there's no dataset yet. Until they exist, the Plant card shows photo, health, canopy % and yellow %, and hides size and stage. If `hydro/vision/status` is `offline`, the card shows "Camera offline" instead of a stale result.
+> **Status (2026-09-24):** the growth-stage model is trained and runs in `vision.py`. Size comes from the stage. Health is still the leaf-colour rule.
 
 ### What exists now
-- **Camera:** Sipeed MaixCAM on the Pi's USB (a USB network link, camera at `10.122.173.1`). The `hydro_cam` app on the camera serves `/snap.jpg`, and `vision.py` on the Pi fetches a live photo every 10 s and saves one every 15 min (or on `snap` sent to `hydro/vision/cmd`). A first static page, `dashboard/index.html`, already shows it live.
-- **MQTT:** `hydro/vision` (JSON result: `canopy_pct`, `yellow_pct`, `greenness`, `health`, `health_reasons`), `hydro/vision/image` (the JPEG itself, retained, so the Plant card can show it straight from MQTT as a Blob URL before `api.py` exists), `hydro/vision/status` (`online` / `offline: …`).
+- **Camera:** Sipeed MaixCAM on the Pi's USB (a USB network link, camera at `10.122.173.1`). The `hydro_cam` app on the camera serves `/snap.jpg`. `vision.py` on the Pi fetches a live photo every 10 s and saves one every 15 min (or on `snap` sent to `hydro/vision/cmd`).
+- **Dataset:** `dataset/lettuce_growth_stages/`, 41 photos in class folders (seedling 18, vegetative 6, matured 17), plus a 224×224 JPEG copy in `dataset/lettuce_224/` with `labels.csv` (`file, stage, size, source`). Both are in git.
+- **Model:** `models/stage.onnx` (MobileNetV3-Small, 6.1 MB), trained on the Pi by `train/train_stage.py`. It runs with ONNX Runtime in `.venv` in **19 ms per photo** on the Pi 5, so it checks every live photo.
+- **MQTT:** `hydro/vision` (JSON), `hydro/vision/image` (the JPEG, retained), `hydro/vision/status`.
 - **Storage:** `data/vision/YYYY-MM-DD/HH-MM-SS.jpg` plus `data/vision/vision_log.csv`.
-- **Later:** the MaixCAM has an NPU, so the size and stage models could run on the camera itself (a MaixCAM `.cvimodel`/`.mud` export) instead of NCNN on the Pi. Decide once the dataset exists.
 
-### What the dataset gives, and what it doesn't
-The dataset has two labels per image:
+### Labels: size follows stage
+The dataset is labelled by stage only. Size is taken from the stage, so one model gives both:
 
-| Label | Classes |
-|---|---|
-| **Size** | Small, Medium, Large |
-| **Stage** | Seedling Stage, Vegetative Stage, Matured Stage |
-
-It has **no healthy/unhealthy label**, so a model trained on it can't learn health directly. The plan handles this in two phases:
-- **Phase 1:** train size and stage models on the dataset. "Health" is a rule-based check built from the model results, leaf colour and the sensor data (below). It's labelled "Health check" in the UI, not "AI health".
-- **Phase 2 (optional):** collect and label Healthy / Unhealthy photos (for example yellowing, tip burn, wilting, rot) from your own rack, then train a third model the same way as the other two.
-
-### Step 0: check the dataset format
-The training method depends on how the dataset is labelled:
-
-| Dataset looks like | Meaning | Model |
+| Stage | Size | Photos |
 |---|---|---|
-| Folders per class, one plant per image (`Small/…jpg`, `Seedling Stage/…jpg`) | **Classification** | Two YOLO11n-cls models: `size.pt` and `stage.pt` |
-| Whole-tray photos plus `.txt` / JSON bounding boxes (YOLO, COCO, Roboflow export) | **Detection** | One YOLO11n detect model that finds each plant. Each box is then classified for size and stage by the two cls models, or the detector's classes combine both (`Medium_Vegetative`, 9 classes) |
+| Seedling | Small | 18 |
+| Vegetative | Medium | 6 |
+| Matured | Large | 17 |
 
-Classification is simpler and faster. If the camera sees several plants, detection is needed to report per-plant results.
+There's **no healthy/unhealthy label**, so health stays a rule (below). A Phase 2 health model needs labelled Healthy/Unhealthy photos from your own rack.
 
-### Training (on a PC or Google Colab, not the Pi)
-1. Put the dataset in `ml/dataset/` using the Ultralytics layout (`train/`, `val/`, `test/`, one folder per class for cls).
-2. **Split by plant or by date, not by random image**: photos of the same plant in both train and test inflate the accuracy. Use 70 / 20 / 10.
-3. Check the class balance. If one class has less than half of the others' images, add augmentation (flip, rotate, brightness ±20 %) or more photos.
-4. Train: `yolo classify train model=yolo11n-cls.pt data=ml/dataset/size imgsz=224 epochs=60` (and the same for `stage`).
-5. **Add 50–100 photos from your own MaixCAM** (the saved `data/vision/` photos) under your grow light to the training set, split across the classes. A model trained only on internet or lab photos often fails on a new camera and new light.
-6. Accept a model when test top-1 accuracy is ≥ 90 % and no class falls below 80 % in the confusion matrix.
-7. Export for the Pi: `yolo export model=best.pt format=ncnn`. NCNN is the fastest CPU runtime on the Pi 5. Copy the exported folder to `ml/models/size_ncnn_model/` and `ml/models/stage_ncnn_model/`.
+### Training (done on the Pi 5)
+`.venv/bin/python train/train_stage.py` (about 20 minutes on the Pi 5's CPU):
+1. Starts from MobileNetV3-Small pretrained on ImageNet and fine-tunes it. Augmentation (random crop, flips, ±20° rotation, colour jitter) and class-weighted loss, since vegetative has only 6 photos.
+2. **5-fold stratified cross-validation**, so every photo is tested once by a model that never saw it. Two models are compared: A (classifier) and B (regression on the stage number 1–3).
+3. Reports train vs test accuracy, **MAE / MSE / RMSE / MAPE** on the stage number (Small = 1, Medium = 2, Large = 3), per-stage precision/recall/F1 and a confusion matrix, against two baselines. Output: `models/stage_report.md`, `models/stage_training.png`, `models/stage_predictions.csv`.
+4. Trains the better model on all photos and exports `models/stage.onnx` + `models/stage_labels.json`.
 
-Rough Pi 5 speed (CPU, NCNN): a 224 px classifier ≈ 10–30 ms, and a 640 px nano detector ≈ 100–250 ms. At one check every 15 minutes, the load is negligible.
+**First result (2026-09-24):**
+
+| Model | Test acc | MAE | MSE | RMSE | MAPE |
+|---|---|---|---|---|---|
+| Always Small (baseline) | 44 % | 0.98 | 1.80 | 1.34 | 35 % |
+| **A: classifier (exported)** | **90 %** | **0.10** | **0.10** | **0.31** | **6 %** |
+| B: regression | 63 % | 0.37 | 0.37 | 0.60 | 24 % |
+
+Seedling recall 94 %, matured 100 %, **vegetative 50 %** (3 of 6). It never confuses Small with Large. Train accuracy is 100 %, so it partly memorises the photos.
+
+Acceptance (unchanged in spirit, adjusted to the tiny dataset): test accuracy ≥ 80 %, MAE < 0.3, vegetative recall > 50 %, better than both baselines. **Vegetative recall is the one check that fails.**
+
+### Next for the model
+1. **More vegetative photos**, 10–15 at least.
+2. **Photos from the MaixCAM itself** (`data/vision/`). All 41 training photos come from the internet; the camera sees one fixed view under your grow light, so the real accuracy may be lower than the test score. Label 20–50 camera photos into the three folders and retrain.
+3. Retrain: `.venv/bin/python train/train_stage.py`, then restart `hydro-vision`. The new `stage.onnx` is picked up at start.
+4. Optional later: run it on the MaixCAM's NPU instead. It needs converting with TPU-MLIR, which runs on an x86 PC, not on the Pi.
 
 ### Camera
-- **Sipeed MaixCAM** over USB (see above). Mount it at a **fixed height and angle** over the rack, so "Large" means the same thing every day. Use the live preview on its screen to aim it and check focus.
-- Take photos only while the grow light is on. Lock the white balance and exposure in `vision.py` so colour stays comparable over time.
+- Mount it at a **fixed height and angle** over the rack, so "Large" means the same thing every day.
+- Take photos only while the grow light is on.
 
-### `vision.py` (new systemd service, `hydro-vision.service`)
-Every 15 minutes (configurable), and on demand when the dashboard sends `snap` on `hydro/vision/cmd`, it:
-1. Captures a photo and saves it to `data/vision/YYYY-MM-DD/HH-MM-SS.jpg`. Photos older than 30 days are deleted automatically, but one photo per day is kept for a growth timeline.
-2. Runs the size and stage models and takes the top class and confidence of each. A result below 60 % confidence is reported as **"Uncertain"** instead of a guess.
-3. Computes **leaf greenness**: an Excess Green index (ExG = 2G − R − B) over the plant pixels, plus the share of yellow/brown pixels.
-4. Runs the **health check** (below).
-5. Publishes to MQTT `hydro/vision` (retained, so a reloaded dashboard sees the last result at once):
+### `vision.py` (`hydro-vision.service`, runs with `.venv/bin/python`)
+Every 10 s (live) and every 15 min (saved), it:
+1. Fetches a photo from the MaixCAM.
+2. Runs the **leaf-colour check** (canopy %, yellow/brown %, greenness, health).
+3. If a plant is in view, runs the **stage model**: `stage` (seedling / vegetative / matured), `stage_conf`, `size` (small / medium / large). Below **60 %** confidence the stage is `"uncertain"` and size is left empty. With no plant in view the model is skipped, because it forces every photo into one of the three stages (a photo of a keyboard came out as "seedling, 95 %").
+4. Publishes to `hydro/vision` (retained):
    ```json
-   {"ts": 1790154000, "image": "2026-09-23/05-00-00.jpg",
-    "size": "Medium", "size_conf": 0.94,
-    "stage": "Vegetative Stage", "stage_conf": 0.92,
-    "greenness": 0.41, "yellow_pct": 2.1,
-    "health": "healthy", "health_reasons": []}
+   {"ts": 1790154000, "image": "2026-09-24/05-00-00.jpg",
+    "canopy_pct": 38.4, "yellow_pct": 1.2, "greenness": 0.41,
+    "health": "healthy", "health_reasons": [],
+    "stage": "vegetative", "stage_conf": 0.87, "size": "medium"}
    ```
-6. Appends one row to `data/vision/vision_log.csv` (time, image, size, conf, stage, conf, greenness, yellow %, health, reasons).
+   If ONNX Runtime or the model file is missing, the three stage fields are left out and everything else still works.
+5. Saved photos append a row to `vision_log.csv`: `time, image, canopy_pct, yellow_pct, greenness, health, reasons, stage, stage_conf, size`. An older log without the stage columns is upgraded automatically at start.
 
-### Health check (Phase 1 rules)
-Three levels: **Healthy**, **Check**, **Unhealthy**. Each rule that fires adds a plain-language reason, which the card shows.
+Test without the camera: `.venv/bin/python vision.py --stage photo1.jpg photo2.jpg`.
+
+### Health check
+As built (colour only): **Healthy**, **Check** (yellow/brown > 8 %), **Unhealthy** (> 20 %), **No plant** (< 2 % green in view).
+
+Still planned, now that stage exists:
 
 | Rule | Check | Unhealthy |
 |---|---|---|
-| Yellow/brown leaf area | > 8 % | > 20 % |
 | Greenness vs 7-day average | drop > 15 % | drop > 30 % |
-| Stage is behind for the plant's age (needs the transplant date) | 1 stage behind | 2 stages behind |
-| Size shrank vs 3 days ago (same camera spot) | 1 class smaller | — |
+| Stage is behind for the plant's age (needs the sowing date) | 1 stage behind | 2 stages behind |
+| Stage went backwards vs 3 days ago (same camera spot) | yes | — |
 | pH or EC out of band for > 6 h in the last 24 h | yes | > 18 h |
 | Model uncertain on 3 checks in a row | yes | — |
 
-Placeholder expected ages: Seedling 0–14 days, Vegetative 15–30 days, Matured 31+ days after sowing. Confirm these for your variety. The thresholds live in `ml/health_rules.yaml`, so they can be tuned without code changes.
+Placeholder expected ages: Seedling 0–14 days, Vegetative 15–30 days, Matured 31+ days after sowing.
 
-### `api.py` additions
-- `GET /api/vision/latest`: the last result, as above.
-- `GET /api/vision/history?range=7d`: rows from `vision_log.csv`, for the stage strip on the Graphs tab.
-- `GET /api/vision/image/{path}`: serves a saved photo, read-only and limited to `data/vision/`.
-
-### Dashboard: Plant card (Overview)
-- The latest snapshot (thumbnail), plus the time it was taken and when the next check is due.
-- **Health** as the largest line: `check` Healthy / `arrow` Check / `alert` Unhealthy, using the same status colours and icons as the sensors. The reasons are listed under it, e.g. "Yellow leaf area 11 %".
-- **Size** and **Stage** with their confidence (e.g. "Medium · 94 %"). "Uncertain" is shown in muted grey.
-- A "Check now" button sends `snap`.
+### Dashboard
+- **Overview, Plant camera card:** photo, health verdict, **growth stage** (with a colour swatch), **size**, model confidence, then canopy / yellow / greenness. "Uncertain" and "model off" show in muted grey.
+- **Graphs, plant stage strip:** a lane under the pump lanes, coloured by stage from `vision_log.csv` (one block per saved check, hatched when uncertain), on the same time axis as the charts.
 
 ---
 
 ## 7a. File layout for vision
 ```
-ml/
-  dataset/                 # not in git (add to .gitignore)
-  train.md                 # the exact training + export commands used
-  models/size_ncnn_model/  # exported models (not in git; copied to the Pi)
-  models/stage_ncnn_model/
-  health_rules.yaml
+dataset/lettuce_growth_stages/   # original photos (in git)
+dataset/lettuce_224/             # 224x224 JPEG copy + labels.csv (in git)
+train/train_stage.py             # cross-validation, report, ONNX export
+train/requirements.txt           # packages for .venv
+models/stage.onnx                # exported model (in git, 6 MB)
+models/stage_labels.json         # classes, sizes, preprocessing
+models/stage_report.md           # latest training report
 vision.py
-hydro-vision.service
-data/vision/               # photos + vision_log.csv (already ignored under data/)
+hydro-vision.service             # runs vision.py with .venv/bin/python
+data/vision/                     # photos + vision_log.csv (ignored under data/)
 ```
 
 ---
@@ -331,97 +339,70 @@ data/vision/               # photos + vision_log.csv (already ignored under data
 ## 8. Architecture
 
 ```
-Browser ──ws://pi:9001──► Mosquitto  (live: hydro/sensors incl. pump states, hydro/log, hydro/vision; send: hydro/cmd)
+Browser ──ws://pi:9001──► Mosquitto  (live: hydro/sensors, hydro/log, hydro/vision*; send: hydro/cmd, hydro/vision/cmd)
                               ▲
-MaixCAM (USB) ──► vision.py ─┘ publishes hydro/vision · writes data/vision/
+MaixCAM (USB) ──► vision.py ─┘ publishes hydro/vision · writes data/vision/ (stage model in .venv)
    │
-   └──http://pi:8000────► FastAPI api.py ──read-only──► data/logs/log_NNNN_*.csv
-                           ├─ GET /api/latest               (readings + actuators)
-                           ├─ GET /api/actuators/history?range=24h  (pump ON intervals)
-                           ├─ GET /api/history?range=24h   (bucketed)
-                           ├─ GET /api/sessions             (list of log files)
-                           ├─ GET /api/vision/latest | /history | /image/{path}
-                           ├─ GET /api/sessions/{log_id}.csv (download one log)
-                           └─ serves web/dist (built dashboard)
+   └──http://pi:8000────► dashboard/server.py (standard library) ──read-only──► data/logs/log_NNNN_*.csv
+                           ├─ GET /api/history?range=1h|24h|7d       readings on a fixed grid, null = no data
+                           ├─ GET /api/actuators/history?range=…     pump ON intervals, runs, on-time
+                           ├─ GET /api/vision/history?range=…        rows from vision_log.csv
+                           ├─ GET /api/export.csv?range=…            session rows in the range, one CSV
+                           └─ serves dashboard/ (index.html, vendor/, live/ → data/vision/live)
 ```
 
-- **Live data** comes straight from Mosquitto's existing websocket listener (`mosquitto/local.conf`, port 9001) using `mqtt.js`. No new backend code is needed for realtime.
-- **History** comes from a new `api.py` (FastAPI, from the README roadmap). It reads the session logs that `bridge.py` writes (one CSV per ESP32 connection, `log_id` + `row` + `time` columns). For a range it picks the files whose name date is inside or before the range, reads the rows in time order and buckets them. The gap between two session files becomes a gap in the chart. The file currently being written is read to its last complete line. Cache parsed closed files in memory, since only the newest one changes.
-- A header chip shows the current session (`log #0007 · since 04:50`), from the newest file in `data/logs/`.
-- The ESP32 log panel shows `hydro/log` messages live over MQTT and keeps the last 200 in memory. Nothing stores them on disk since the SQLite logger was removed, so the panel starts empty after a page reload. If older messages are needed, have `bridge.py` write them to a small `events` file next to each session log.
-- On load, the dashboard fetches `/api/latest` so the page isn't empty for 2 s, then MQTT takes over.
-- A single systemd unit, `hydro-api.service`, serves both API and static files. Use the full nvm node path only for building. At runtime it is Python only.
-- **Security note (now urgent).** The 9001 websocket listener is LAN-wide and anonymous, so anyone on the network can publish to `hydro/cmd`. The firmware **now accepts** `pumpaon`, `pumpbon`, `sampleoff`, `pumpauto`, `tankreset`, `phreset` etc., and `bridge.py` forwards everything on `hydro/cmd` to the ESP32. So anyone on the LAN can already run a dosing pump or wipe calibration. Add a Mosquitto password and an ACL that lets only local clients (the bridge, the API) publish to `hydro/cmd` before exposing the dashboard. Displaying status (this plan) is read-only and safe.
+- **Live data** comes straight from Mosquitto's websocket listener (port 9001) using the vendored `mqtt.js`.
+- **History** comes from `dashboard/server.py`, which replaced `python3 -m http.server` (and the planned FastAPI `api.py`: FastAPI isn't installed and isn't needed). For a range it picks the session CSVs whose file name date is before the range end and whose last write is after the range start, reads the rows and averages them into buckets: 1h = 2 s, 24h = 60 s, 7d = 600 s. Empty buckets are `null`, so gaps show as breaks. `ec` is `null` where `ec_low = 1`. Closed files are cached until they change.
+- **Pump runs** are rebuilt from the 0→1 and 1→0 changes. A run is closed and marked `cut` when the data stops for more than 10 s or the session file ends.
+- The Graphs tab refetches every 10 s (1h), 60 s (24h) or 120 s (7d) while it's open.
+- **Security note (still open).** The 9001 websocket listener is LAN-wide and anonymous, and the Calibration tab now publishes to `hydro/cmd`. Anyone on the LAN can already send any ESP32 command. Adding a Mosquitto password and an ACL for `hydro/cmd` was deferred on 2026-09-24.
 
-### Frontend stack
+### Frontend stack (changed 2026-09-24)
 | Concern | Choice | Why |
 |---|---|---|
-| Build | Vite + React + TypeScript | Fast, static output served by FastAPI |
-| Styling | Tailwind v4 + CSS variables tokens | shadcn-compatible, themeable |
-| Components | shadcn/ui: Card, Tabs, Sheet, Button, Tooltip, Table, Toggle Group, Dialog, Sonner | Accessible primitives |
-| Charts | shadcn Chart (Recharts), data capped to ≤ 1500 pts per chart | Matches shadcn theming. Switch to uPlot if the Pi's browser struggles. |
-| Live data | `mqtt.js` in one `useHydroLive()` hook with an external store (`useSyncExternalStore`) | Only subscribed components re-render every 2 s (vercel-react-best-practices) |
-| History | TanStack Query, `staleTime` 60 s | Caching, refetch on range change |
-| Fonts | `@fontsource-variable/geist` + `geist-mono` | Offline |
+| Page | One static `dashboard/index.html`, no build step | The live page already worked offline this way; no Node build on the Pi |
+| Charts | uPlot 1.6.31, vendored in `dashboard/vendor/` (~50 KB) | Fast on the Pi, handles 1800 points per chart, synced crosshair built in |
+| Live data | `mqtt.js`, vendored | Offline |
+| History | `fetch()` to `dashboard/server.py` | Standard library only |
+| Fonts | System UI + system monospace | Offline, nothing to host |
 
-Performance rules for 2 s updates:
-- Keep the live reading in an external store, not in top-level React state, and never re-render the whole page per message.
-- Memoize the chart components. The live point is appended to the 1 h series only.
-- Keep a ring buffer of the last 30 min in memory for the sparklines. Don't refetch.
+Performance rules still hold: values swap text with no animation, charts only redraw on a refetch, and only the visible tab does work.
 
-### Proposed file layout
+### File layout
 ```
-web/
-  src/
-    config/targets.ts        # bands + presets
-    lib/mqtt.ts              # connection, reconnect, external store
-    lib/api.ts               # /api/* fetchers
-    hooks/useHydroLive.ts
-    components/
-      StatusHeader.tsx
-      ReadingTile.tsx        # value, BandMeter, StatusBadge, Sparkline
-      BandMeter.tsx
-      PumpCard.tsx           # ON/OFF pill, running/last-ran, today's totals
-      PumpLanes.tsx          # ON intervals on the history time axis
-      PlantCard.tsx          # snapshot, health, size, stage
-      StageStrip.tsx         # stage timeline on the Graphs tab
-    pages/Overview.tsx, Graphs.tsx, Calibration.tsx   # one screen each, no scroll
-      HistoryCharts.tsx      # synced small multiples
-      EventLog.tsx
-      calibration/EcWizard.tsx, PhWizard.tsx, StabilityGate.tsx
-    styles/tokens.css        # light-mode colors, easing, durations
-api.py
-hydro-api.service
+dashboard/
+  index.html          # Overview, Graphs, Calibration tabs
+  server.py           # static files + /api/* history
+  vendor/mqtt.min.js, uPlot.iife.min.js, uPlot.min.css
+  live -> ../data/vision/live
+hydro-dashboard.service   # runs dashboard/server.py
 ```
 
 ---
 
 ## 9. Build order
 
-0. **Firmware + bridge.** ✅ Pump fields in the ESP32 JSON, pump columns in `LOG_FIELDS`, `log_id`/`row` in each `hydro/sensors` message. Still open: firmware max-run-time for Pump A/B, and MQTT auth/ACL on `hydro/cmd`.
-1. **Tokens.** Light-mode colors (validated with dataviz `validate_palette.js`), type scale, easing and durations.
-2. **`api.py`.** `/api/latest` (with `actuators`), `/api/history` with bucketing, `/api/actuators/history`, `/api/sessions`. Test with `curl`.
-3. **Live hook.** MQTT over websocket with a connection/stale indicator.
-4. **Hero tiles.** Value, band meter, status, sparkline, stale and not-installed states.
-5. **Pump cards.** ON/OFF/unknown, running and last-ran timers, today's totals.
-5a. **Vision (later, once the dataset exists).** Check the dataset format, train and export the size and stage models, mount the camera, write `vision.py` + `hydro-vision.service`, then build the Plant card.
-6. **History charts + pump lanes.** Range tabs, synced crosshair, gaps, table view, CSV.
-7. **Event log.**
-8. **Calibration wizards** with stability gates.
-9. **Audit pass.** `/impeccable audit`, `web-design-guidelines`, and `review-animations`, then fix.
-10. `hydro-api.service` + README section. Tick "FastAPI" and "React dashboard" in the Roadmap.
+0. **Firmware + bridge.** ✅ Pump fields, pump columns, `log_id`/`row`. Still open: firmware max-run-time for Pump A/B, and MQTT auth/ACL on `hydro/cmd`.
+1. **Overview page.** ✅ Sensor tiles with band meters, pump cards, raw values, camera card (2026-09-23).
+2. **Vision.** ✅ MaixCAM + `vision.py` + colour health (2026-09-23). ✅ Dataset, training, `stage.onnx`, stage/size in `vision.py` and on the Plant card (2026-09-24).
+3. **History server.** ✅ `dashboard/server.py` with `/api/history`, `/api/actuators/history`, `/api/vision/history`, `/api/export.csv`.
+4. **Graphs tab.** ✅ 1h/24h/7d, four charts with target bands and gap hatching, synced crosshair, table view, CSV download, pump lanes, plant stage strip.
+5. **Calibration tab.** ✅ EC, pH and tank wizards with stability gates, stored calibration (`status`), hold-to-reset pH.
+6. **Next:** pump "today" totals and "last ran" on the Overview cards (from `/api/actuators/history`), the "Pump ON long" warning, ESP32 message log, health rules that use stage.
+7. **Model:** more vegetative photos and MaixCAM photos, then retrain (section 7).
+8. **Audit pass** (`web-design-guidelines`, reduced motion, phone width), then MQTT auth.
 
 ## 10. Verification
 - Unplug the ESP32. Tiles go stale within 10 s, the chart shows a gap, and plugging back in recovers without a reload.
 - Put the EC probe in plain water. `ec_low` shows `< 0.6` with an explanation, not a false "Low" alarm.
-- Throttle the CPU 4× in DevTools. 2 s updates don't drop frames, and React Profiler shows only the tiles re-render.
+- Throttle the CPU 4× in DevTools. 2 s updates don't drop frames.
 - Switch each relay by hand (or with a test sketch). The matching card turns ON within 2 s, "running" counts up, and OFF shows the right "last ran" duration. Test with the relay board's LED to confirm active-low boards aren't reported inverted.
 - Unplug the ESP32 while a pump is ON. The card goes to "—" (unknown) within 10 s, never a frozen ON, and the activity lane marks the run as cut.
 - Pull the EC probe out of solution in auto mode. Pumps A and B run, and after the warning time the cards show "ON long".
 - Drop the tank below 20 % (after `tankempty`/`tankfull`). All three cards go to "OFF (lock icon) Tank low" within 2 s, and back when refilled.
 - Send `pumpaon` on `hydro/cmd`. The mode chip switches to MANUAL; `pumpauto` switches it back.
 - Open each tab full-screen on the 1920×1080 display. Nothing is cut off and the page doesn't scroll.
-- Vision: run `vision.py --once` on 10 plants you've labelled by hand. At least 9 of 10 match for size and stage. Cover the camera and confirm the card shows "Uncertain", not a guess.
+- Vision: run `.venv/bin/python vision.py --stage` on 10 camera photos you've labelled by hand. At least 8 of 10 should match. Cover the camera and confirm the card shows "No plant in view" with no stage, not a guess.
 - Health: hold a yellowed leaf in view. The card goes to Check with a yellow-area reason.
 - Test on a phone and with reduced motion.
 - Run a full EC calibration with real buffers through the wizard and confirm `status` shows the new K-values.
@@ -433,9 +414,11 @@ hydro-api.service
 - Maximum continuous run for Pump A/B in the firmware, and the dashboard "ON long" warning time (placeholder 10 min).
 - Whether A and B should dose in timed pulses instead of running until target (avoids overshoot while sensors settle).
 - What the sampling pump feeds (sensor chamber? tank loop?), for its card's subtitle.
-- The dataset's format (class folders or bounding boxes) and number of images per class.
+- ~~The dataset's format~~: decided (class folders, 41 photos; size follows stage).
 - ~~Which camera~~: decided (Sipeed MaixCAM over USB). Still open: where it's mounted.
 - The sowing/transplant date per batch, and the expected age for each stage.
 - Whether to collect Healthy/Unhealthy photos for a Phase 2 health model.
-- Whether the size/stage models run on the MaixCAM's NPU or on the Pi 5 (NCNN).
+- ~~Where the model runs~~: decided (Pi 5, ONNX Runtime, 19 ms). The MaixCAM NPU stays an option.
+- ~~React or plain HTML~~: decided (plain HTML + vendored uPlot).
+- When to add MQTT auth/ACL, now that the Calibration tab sends commands.
 - Whether the dashboard should ever control the pumps (a later phase; needs the MQTT auth above first).

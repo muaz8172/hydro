@@ -7,7 +7,11 @@ Plant camera -> MQTT (offline, local only)
   data/vision/YYYY-MM-DD/HH-MM-SS.jpg and appends a row to data/vision/vision_log.csv
   (saving every 10 s would be ~150 MB/day)
 - Checks leaf colour (green vs yellow/brown share) and gives a health result:
-  healthy / check / unhealthy / no_plant. This is a colour rule, not an AI model (no dataset yet)
+  healthy / check / unhealthy / no_plant. This is a colour rule, not an AI model
+- Runs the growth-stage model (models/stage.onnx, trained by train/train_stage.py) on every photo:
+  stage seedling / vegetative / matured, size small / medium / large (size follows stage).
+  Below 60 % confidence the stage is "uncertain". Needs onnxruntime (in .venv); without it the
+  stage fields are left out and everything else still works
 - Publishes (retained, so a reloaded dashboard gets the last one at once):
     hydro/vision        JSON result
     hydro/vision/image  the JPEG itself (binary)
@@ -15,7 +19,8 @@ Plant camera -> MQTT (offline, local only)
   and writes data/vision/live/latest.jpg + latest.json (HTTP fallback for the dashboard)
 - Photos older than 30 days are deleted, except the first photo of each day
 
-Test with: python3 vision.py --once
+Test with: .venv/bin/python vision.py --once
+     .venv/bin/python vision.py --stage photo.jpg   (stage model only, no camera/MQTT)
 """
 
 import csv
@@ -29,7 +34,7 @@ import urllib.request
 from datetime import datetime, timedelta
 
 import paho.mqtt.client as mqtt
-from PIL import Image, ImageChops, ImageStat
+from PIL import Image, ImageChops, ImageOps, ImageStat
 
 CAM_URL    = os.environ.get("HYDRO_CAM_URL", "http://10.122.173.1:8080/snap.jpg")
 INTERVAL      = int(os.environ.get("HYDRO_VISION_INTERVAL", "10"))        # s between live photos
@@ -46,7 +51,13 @@ VISION_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "v
 CSV_PATH   = os.path.join(VISION_DIR, "vision_log.csv")
 LIVE_DIR   = os.path.join(VISION_DIR, "live")     # latest.jpg + latest.json, served by the
                                                   # dashboard as an HTTP fallback to MQTT
-CSV_FIELDS = ["time", "image", "canopy_pct", "yellow_pct", "greenness", "health", "reasons"]
+CSV_FIELDS = ["time", "image", "canopy_pct", "yellow_pct", "greenness", "health", "reasons",
+              "stage", "stage_conf", "size"]
+
+MODEL_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+STAGE_MODEL = os.path.join(MODEL_DIR, "stage.onnx")
+STAGE_META  = os.path.join(MODEL_DIR, "stage_labels.json")
+MIN_STAGE_CONF = 0.60               # below this the stage is reported as "uncertain"
 
 # Only look at this part of the photo (fractions: left, top, right, bottom), to skip
 # walls/trays around the plants. (0, 0, 1, 1) = whole photo.
@@ -128,6 +139,64 @@ def analyse(jpeg):
     }
 
 
+# ================= Growth-stage model =================
+class StageModel:
+    """MobileNetV3 classifier exported to ONNX. Same preprocessing as training:
+    centre-crop to a square, resize to 224x224, ImageNet mean/std."""
+
+    def __init__(self):
+        import numpy as np
+        import onnxruntime as ort
+        self.np = np
+        self.meta = json.load(open(STAGE_META))
+        self.sess = ort.InferenceSession(STAGE_MODEL, providers=["CPUExecutionProvider"])
+        self.mean = np.array(self.meta["mean"], dtype=np.float32).reshape(3, 1, 1)
+        self.std = np.array(self.meta["std"], dtype=np.float32).reshape(3, 1, 1)
+
+    def predict(self, jpeg):
+        np = self.np
+        img = ImageOps.fit(Image.open(io.BytesIO(jpeg)).convert("RGB"), (224, 224), Image.LANCZOS)
+        x = (np.asarray(img, dtype=np.float32).transpose(2, 0, 1) / 255.0 - self.mean) / self.std
+        out = self.sess.run(None, {"image": x[None]})[0][0]
+        if self.meta["kind"] == "classifier":
+            p = np.exp(out - out.max())
+            p /= p.sum()
+            i = int(p.argmax())
+            conf = float(p[i])
+        else:                                           # regression: 1..3, rounded
+            i = int(np.clip(np.rint(out[0]), 1, 3)) - 1
+            conf = float(max(0.0, 1 - abs(out[0] - (i + 1)) * 2))
+        if conf < MIN_STAGE_CONF:
+            return {"stage": "uncertain", "stage_conf": round(conf, 3), "size": None}
+        return {"stage": self.meta["stages"][i], "stage_conf": round(conf, 3),
+                "size": self.meta["sizes"][i]}
+
+
+def load_stage_model():
+    try:
+        model = StageModel()
+        print(f"[vision] stage model loaded: {STAGE_MODEL}", flush=True)
+        return model
+    except Exception as e:                              # no onnxruntime / no model file
+        print(f"[vision] stage model off ({e.__class__.__name__}: {e})", flush=True)
+        return None
+
+
+stage_model = None
+
+
+def stage_of(jpeg, health):
+    if stage_model is None:
+        return {}
+    if health == "no_plant":
+        return {"stage": None, "stage_conf": None, "size": None}
+    try:
+        return stage_model.predict(jpeg)
+    except Exception as e:
+        print(f"[vision] stage model error: {e}", flush=True)
+        return {"stage": None, "stage_conf": None, "size": None}
+
+
 # ================= Storage =================
 def write_live(jpeg, result):
     """Replace live/latest.jpg and live/latest.json atomically (never a half-written file)."""
@@ -148,6 +217,26 @@ def save(jpeg, now):
     return rel
 
 
+def upgrade_csv():
+    """Add the stage columns to a vision_log.csv written before the stage model existed."""
+    if not os.path.exists(CSV_PATH):
+        return
+    with open(CSV_PATH, newline="") as f:
+        rows = list(csv.reader(f))
+    if not rows or rows[0] == CSV_FIELDS:
+        return
+    old = rows[0]
+    tmp = CSV_PATH + ".tmp"
+    with open(tmp, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(CSV_FIELDS)
+        for r in rows[1:]:
+            d = dict(zip(old, r))
+            w.writerow([d.get(k, "") for k in CSV_FIELDS])
+    os.replace(tmp, CSV_PATH)
+    print("[vision] vision_log.csv: added stage columns", flush=True)
+
+
 def log_row(now, rel, result):
     new = not os.path.exists(CSV_PATH)
     with open(CSV_PATH, "a", newline="") as f:
@@ -156,7 +245,9 @@ def log_row(now, rel, result):
             w.writerow(CSV_FIELDS)
         w.writerow([now.strftime("%Y-%m-%d %H:%M:%S"), rel, result["canopy_pct"],
                     result["yellow_pct"], result["greenness"], result["health"],
-                    "; ".join(result["health_reasons"])])
+                    "; ".join(result["health_reasons"]), result.get("stage") or "",
+                    "" if result.get("stage_conf") is None else result["stage_conf"],
+                    result.get("size") or ""])
 
 
 def cleanup(now):
@@ -206,13 +297,15 @@ def take_photo(client, keep):
 
     rel = save(jpeg, now) if keep else None
     result = {"ts": int(now.timestamp()), "image": rel, **analyse(jpeg)}
+    result.update(stage_of(jpeg, result["health"]))
     write_live(jpeg, result)
     client.publish(TOPIC_IMAGE, jpeg, retain=True)
     client.publish(TOPIC_RESULT, json.dumps(result), retain=True)
     if keep:
         log_row(now, rel, result)
         print(f"[vision] saved {rel}  {result['health']}  canopy {result['canopy_pct']}%  "
-              f"yellow/brown {result['yellow_pct']}%", flush=True)
+              f"yellow/brown {result['yellow_pct']}%  stage {result.get('stage')} "
+              f"{result.get('stage_conf')}", flush=True)
         cleanup(now)
     return True
 
@@ -238,8 +331,14 @@ def make_client():
 
 
 def main():
-    global snap_requested
+    global snap_requested, stage_model
+    stage_model = load_stage_model()
+    if "--stage" in sys.argv:       # test the model on photo files, no camera or MQTT
+        for path in sys.argv[sys.argv.index("--stage") + 1:]:
+            print(path, stage_of(open(path, "rb").read(), "healthy"))
+        return
     os.makedirs(VISION_DIR, exist_ok=True)
+    upgrade_csv()
     client = make_client()
     client.on_connect = on_connect
     client.on_message = on_message

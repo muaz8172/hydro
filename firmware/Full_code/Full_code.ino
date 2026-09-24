@@ -6,8 +6,8 @@
  *   EC      : A0 -> GPIO34, VCC -> 3.3V, GND -> GND (T1 unconnected)
  *   pH      : Po -> 10k/20k divider -> GPIO35, V+ -> 5V, G -> GND
  *   HC-SR04 : TRIG -> GPIO32, ECHO -> 1k/2k divider -> GPIO33, VCC -> 5V, GND -> GND
- *   Relay   : IN1 (Pump A) -> GPIO25, IN2 (Pump B) -> GPIO26, VCC -> 5V, GND -> GND
- *   Relay 1ch (sampling pump) : IN -> GPIO27, VCC -> 5V, GND -> GND
+ *   Relay 1 (2ch) : IN1 (Pump A) -> GPIO25, IN2 (Pump B) -> GPIO26, VCC -> 5V, GND -> GND
+ *   Relay 2 (2ch) : IN1 (sampling pump) -> GPIO27, IN2 spare (not connected), VCC -> 5V, GND -> GND
  *
  * Output (every 2 s, one line):
  *   {"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,
@@ -46,13 +46,12 @@
 #define PH_PIN         35
 #define TRIG_PIN       32
 #define ECHO_PIN       33
-#define PUMP_A_PIN     25       // relay IN1
-#define PUMP_B_PIN     26       // relay IN2
-#define SAMPLE_PIN     27       // 1-channel relay IN (sampling pump)
+#define PUMP_A_PIN     25       // relay 1 IN1
+#define PUMP_B_PIN     26       // relay 1 IN2
+#define SAMPLE_PIN     27       // relay 2 IN1 (sampling pump)
 
 // ---------- Pump control ----------
-#define RELAY_ACTIVE_LOW  true  // 2-ch relay (Pump A/B): LOW = ON. Set false if reversed
-#define SAMPLE_ACTIVE_LOW true  // 1-ch relay (sampling): LOW = ON. Set false if reversed
+#define RELAY_ACTIVE_LOW  true  // both 2-ch relays: LOW = ON. Set false if reversed
 // Target ranges: pumps run while EC or pH is below/above, stop when both inside
 #define EC_MIN         1.2      // mS/cm
 #define EC_MAX         1.8      // mS/cm
@@ -234,8 +233,7 @@ void saveTankCal()
 // ================= Pumps (relay) =================
 void setPump(uint8_t pin, bool &state, bool on)
 {
-  bool activeLow = (pin == SAMPLE_PIN) ? SAMPLE_ACTIVE_LOW : RELAY_ACTIVE_LOW;
-  digitalWrite(pin, (on == activeLow) ? LOW : HIGH);
+  digitalWrite(pin, (on == RELAY_ACTIVE_LOW) ? LOW : HIGH);
   if (state != on) {
     state = on;
     const char* name = pin == PUMP_A_PIN ? "Pump A" : pin == PUMP_B_PIN ? "Pump B" : "Sampling pump";
@@ -418,7 +416,7 @@ void setup()
   digitalWrite(PUMP_B_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
   pinMode(PUMP_A_PIN, OUTPUT);
   pinMode(PUMP_B_PIN, OUTPUT);
-  digitalWrite(SAMPLE_PIN, SAMPLE_ACTIVE_LOW ? HIGH : LOW);   // OFF until first reading
+  digitalWrite(SAMPLE_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);    // OFF until first reading
   pinMode(SAMPLE_PIN, OUTPUT);
 
   Serial.begin(115200);

@@ -186,7 +186,7 @@ Three pumps, each switched by its own relay on the ESP32:
 |---|---|---|---|---|
 | Nutrient pump A | 2-ch relay IN1 / GPIO25 (active LOW) | Doses nutrient A | `pump_a` | `pump_a` |
 | Nutrient pump B | 2-ch relay IN2 / GPIO26 (active LOW) | Doses nutrient B | `pump_b` | `pump_b` |
-| Sampling pump | 1-ch relay IN / GPIO27 (active LOW) | Moves water for sampling, **always on** | `pump_sample` | `pump_sample` |
+| Sampling pump | 2-ch relay 2 IN1 / GPIO27 (active LOW) | Moves water for sampling, **always on** | `pump_sample` | `pump_sample` |
 | Mode | n/a | `true` = AUTO (EC/pH target), `false` = MANUAL | `pump_auto` | `pump_auto` |
 
 The dashboard **only displays** pump status in this phase. It has no ON/OFF buttons. The ESP32 decides when pumps run.

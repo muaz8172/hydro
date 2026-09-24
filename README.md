@@ -61,8 +61,8 @@ hydro/
 | EC sensor (EC V2.1) | A0 / VCC / GND | GPIO34 / **3.3V** / GND | T1 unconnected |
 | pH sensor (PH-4502C) | Po / V+ / G | GPIO35 via divider / **5V** / GND | Do, To unconnected |
 | HC-SR04 (water level) | TRIG / ECHO / VCC / GND | GPIO32 / GPIO33 via divider / **5V** / GND | Mounted above the tank, facing down |
-| 2-channel relay (Pump A / Pump B) | IN1 / IN2 / VCC / GND | GPIO25 / GPIO26 / **5V** / GND | Active LOW; GND shared with ESP32 |
-| 1-channel relay (sampling pump) | IN / VCC / GND | GPIO27 / **5V** / GND | Active LOW; GND shared with ESP32 |
+| 2-channel relay 1 (Pump A / Pump B) | IN1 / IN2 / VCC / GND | GPIO25 / GPIO26 / **5V** / GND | Active LOW; GND shared with ESP32 |
+| 2-channel relay 2 (sampling pump) | IN1 / IN2 / VCC / GND | GPIO27 / spare / **5V** / GND | Active LOW; IN2 not connected; GND shared with ESP32 |
 
 **pH voltage divider (required).** The PH-4502C runs on 5V and its output can exceed 3.3V:
 
@@ -187,14 +187,14 @@ The pump state is in every JSON line (`pump_a`, `pump_b`, `pump_auto`), and `sta
 
 ### Sampling pump (always on)
 
-A separate **1-channel relay on GPIO27** drives the sampling pump. It **runs all the time** from boot (switched on with the first reading, ~2 s after start-up) and is not affected by EC/pH.
+**Relay 2 IN1 (GPIO27)**, on the second 2-channel relay, drives the sampling pump. It **runs all the time** from boot (switched on with the first reading, ~2 s after start-up) and is not affected by EC/pH.
 
 | Command | Action |
 |---|---|
 | `sampleoff` | Stop the sampling pump (e.g. for maintenance) |
 | `sampleon` | Start it again |
 
-State is in the JSON (`pump_sample`) and in `status`. If your 1-channel module turns ON with HIGH, set `SAMPLE_ACTIVE_LOW` to `false`.
+State is in the JSON (`pump_sample`) and in `status`. Both relay modules share `RELAY_ACTIVE_LOW`; if yours turn ON with HIGH, set it to `false`.
 
 ### Tank low pump stop (dry-run protection)
 

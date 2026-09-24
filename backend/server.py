@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Hydro dashboard server (offline, standard library only)
-- Serves the dashboard page (this folder) on port 8000, like `python3 -m http.server`
+- Serves the dashboard page (frontend/) on port 8000, like `python3 -m http.server`
 - Adds a small read-only history API over the session CSVs that bridge.py writes:
     GET /api/history?range=1h|24h|7d            readings on a fixed time grid (null = no data)
     GET /api/actuators/history?range=...        pump ON intervals + runs/on-time per pump
@@ -9,7 +9,7 @@ Hydro dashboard server (offline, standard library only)
     GET /api/export.csv?range=...               every session CSV row in the range, one file
 Bucket sizes: 1h = 2 s (raw), 24h = 60 s, 7d = 600 s. Each bucket is the mean of its rows.
 
-Run: python3 dashboard/server.py   (hydro-dashboard.service does this at boot)
+Run: python3 backend/server.py   (hydro-dashboard.service does this at boot)
 """
 
 import csv
@@ -24,7 +24,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(HERE)                       # repo root (backend/..)
+FRONTEND = os.path.join(ROOT, "frontend")
 LOG_DIR = os.path.join(ROOT, "data", "logs")
 VISION_CSV = os.path.join(ROOT, "data", "vision", "vision_log.csv")
 PORT = int(os.environ.get("HYDRO_DASH_PORT", "8000"))
@@ -173,7 +174,7 @@ def export_csv(q):
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
-        super().__init__(*a, directory=HERE, **kw)
+        super().__init__(*a, directory=FRONTEND, **kw)
 
     def send_json(self, obj):
         body = json.dumps(obj, separators=(",", ":")).encode()

@@ -3,7 +3,7 @@ Description=Hydro dashboard (page + history API on :8000, live data over MQTT we
 After=network.target mosquitto.service
 
 [Service]
-ExecStart=/usr/bin/python3 /home/hydro/hydro/dashboard/server.py
+ExecStart=/usr/bin/python3 /home/hydro/hydro/backend/server.py
 Restart=always
 RestartSec=3
 User=hydro

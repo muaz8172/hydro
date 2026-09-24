@@ -20,19 +20,24 @@ ESP32 --USB serial (115200)--> bridge.py --> Mosquitto (localhost)
 ```
 hydro/
 ├── README.md
-├── bridge.py                  # Pi: ESP32 serial -> MQTT bridge + CSV session logs
-├── hydro-bridge.service       # Pi: systemd service for bridge.py
-├── vision.py                  # Pi: plant camera -> leaf colour check + stage model -> MQTT + photos
-├── hydro-vision.service       # Pi: systemd service for vision.py
+├── frontend/                  # Dashboard page (runs in the browser)
+│   ├── index.html             #   Overview / Graphs / Calibration tabs
+│   ├── vendor/                #   mqtt.js + uPlot (offline, no CDN)
+│   └── live -> ../data/vision/live   # latest camera photo (HTTP fallback)
+├── backend/                   # Everything that runs on the Pi 5
+│   ├── bridge.py              #   ESP32 serial -> MQTT bridge + CSV session logs
+│   ├── vision.py              #   plant camera -> leaf colour check + stage model -> MQTT + photos
+│   ├── server.py              #   serves frontend/ + history API on port 8000
+│   ├── models/stage.onnx      #   trained growth-stage model (+ report)
+│   ├── train/train_stage.py   #   trains the growth-stage model (cross-validation + report)
+│   ├── systemd/               #   hydro-bridge / hydro-vision / hydro-dashboard .service
+│   ├── mosquitto/local.conf   #   local-only Mosquitto config
+│   └── udev/99-esp32.rules    #   fixed /dev/esp32 port name
+├── data/                      # Runtime data, not in git: logs/ (session CSVs), vision/ (photos)
 ├── maixcam/hydro_cam/         # MaixCAM app (runs ON the camera): preview + photo server
-├── dashboard/                 # Pi: dashboard (Overview / Graphs / Calibration) + server.py history API
 ├── dataset/lettuce_growth_stages/  # Lettuce photos by growth stage (seedling / vegetative / matured)
 ├── dataset/lettuce_224/       # Same photos as 224x224 JPEG + labels.csv (stage + size)
-├── train/train_stage.py       # Pi: trains the growth-stage model (cross-validation + report)
-├── models/stage.onnx          # Trained growth-stage model, used by vision.py
-├── hydro-dashboard.service    # Pi: runs dashboard/server.py on port 8000
-├── mosquitto/local.conf       # Pi: local-only Mosquitto config
-├── udev/99-esp32.rules        # Pi: fixed /dev/esp32 port name
+├── docs/                      # Dashboard design plan, system guide PDF
 ├── Relay_Test/Relay_Test.ino  # ESP32: 2-channel relay test (Pump A / Pump B)
 └── esp32/hydro_esp32/
     ├── hydro_esp32.ino        # ESP32 firmware (DHT22 + EC + pH)
@@ -216,23 +221,23 @@ sudo apt install -y mosquitto mosquitto-clients python3-serial python3-paho-mqtt
 ### 2. Fixed port name `/dev/esp32`
 The ESP32 uses a CP2102 USB chip (`10c4:ea60`, check with `lsusb`).
 ```bash
-sudo cp udev/99-esp32.rules /etc/udev/rules.d/
+sudo cp backend/udev/99-esp32.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 sudo usermod -aG dialout $USER
 sudo reboot
 ```
-`udev/99-esp32.rules` contains:
+`backend/udev/99-esp32.rules` contains:
 ```
 SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="esp32"
 ```
 
 ### 3. Mosquitto (local only)
 ```bash
-sudo cp mosquitto/local.conf /etc/mosquitto/conf.d/local.conf
+sudo cp backend/mosquitto/local.conf /etc/mosquitto/conf.d/local.conf
 sudo systemctl restart mosquitto
 sudo systemctl enable mosquitto
 ```
-`mosquitto/local.conf` contains:
+`backend/mosquitto/local.conf` contains:
 ```
 listener 1883 localhost
 listener 9001
@@ -242,7 +247,7 @@ allow_anonymous true
 
 ### 4. Bridge as a service (starts at boot)
 ```bash
-sudo cp hydro-bridge.service /etc/systemd/system/
+sudo cp backend/systemd/hydro-bridge.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now hydro-bridge
 ```
@@ -272,7 +277,7 @@ mosquitto_sub -t hydro/sensors -v
 ### Manual run (for testing)
 ```bash
 sudo systemctl stop hydro-bridge      # free the serial port first
-python3 ~/hydro/bridge.py
+python3 ~/hydro/backend/bridge.py
 ```
 
 ### Recommended testing order
@@ -379,8 +384,8 @@ that file (or use Settings → Auto start on the MaixCAM).
 `vision.py` runs from the project's Python environment `.venv`, which has ONNX Runtime for the
 stage model (set up once, see section 6 below). With plain `python3` it still works, without stage.
 ```bash
-~/hydro/.venv/bin/python ~/hydro/vision.py --once   # test: one photo, prints the result
-sudo cp ~/hydro/hydro-vision.service /etc/systemd/system/
+~/hydro/.venv/bin/python ~/hydro/backend/vision.py --once   # test: one photo, prints the result
+sudo cp ~/hydro/backend/systemd/hydro-vision.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now hydro-vision
 ```
@@ -410,7 +415,7 @@ Health is a **leaf colour rule**. Stage and size come from the **AI model** (sec
 The model only runs when the colour check finds a plant: it knows only the three stages, so it
 would call anything (even a keyboard) one of them. Keep the camera
 at a fixed spot and take photos under the grow light so results compare day to day. The colour
-bands, thresholds and `ROI` (crop to the tray) are at the top of `vision.py`.
+bands, thresholds and `ROI` (crop to the tray) are at the top of `backend/vision.py`.
 
 `hydro/vision/image` carries the JPEG itself (retained), so the dashboard can show the latest
 photo straight from MQTT. `hydro/vision/status` is `online` or `offline: <reason>`.
@@ -428,16 +433,16 @@ The dashboard has three tabs:
   calibration (`status`) and a hold-to-reset for pH.
 
 Live values come from Mosquitto's websocket listener (port 9001). History comes from
-`dashboard/server.py`, which serves the page and reads the session CSVs in `data/logs/`
-(standard library only). Everything works offline (`mqtt.js` and uPlot are in `dashboard/vendor/`).
+`backend/server.py`, which serves the page (`frontend/`) and reads the session CSVs in `data/logs/`
+(standard library only). Everything works offline (`mqtt.js` and uPlot are in `frontend/vendor/`).
 ```bash
-sudo cp ~/hydro/hydro-dashboard.service /etc/systemd/system/
+sudo cp ~/hydro/backend/systemd/hydro-dashboard.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now hydro-dashboard
 ```
 Open **http://localhost:8000** on the Pi, or `http://<pi-ip>:8000` from a phone on the same
 network. If the browser can't reach MQTT on port 9001 (the header shows "Live link
-down"), the camera photo still updates through `dashboard/live/` (a link to `data/vision/live/`,
+down"), the camera photo still updates through `frontend/live/` (a link to `data/vision/live/`,
 which `vision.py` rewrites every 10 s). Sensor tiles and calibration need the MQTT link.
 Design and next steps: `docs/dashboard-design-plan.md`.
 
@@ -460,27 +465,27 @@ file name. `dataset/lettuce_224/` has the same 41 photos converted to 224×224 J
 See [`dataset/lettuce_growth_stages/README.md`](dataset/lettuce_growth_stages/README.md).
 
 ### 6. Growth-stage AI model
-`train/train_stage.py` trains a small image model (MobileNetV3-Small) on `dataset/lettuce_224/`,
+`backend/train/train_stage.py` trains a small image model (MobileNetV3-Small) on `dataset/lettuce_224/`,
 on the Pi 5 itself, in about 20 minutes. One-time setup of the Python environment:
 ```bash
 cd ~/hydro
 python3 -m venv .venv
 .venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-.venv/bin/pip install -r train/requirements.txt
+.venv/bin/pip install -r backend/train/requirements.txt
 ```
 Train, then restart the camera service so it loads the new model:
 ```bash
-.venv/bin/python train/train_stage.py
+.venv/bin/python backend/train/train_stage.py
 sudo systemctl restart hydro-vision
 ```
 It tests with 5-fold cross-validation (every photo is tested once by a model that never saw it),
-writes `models/stage_report.md` (accuracy, MAE/MSE/RMSE/MAPE, per-stage results, confusion matrix)
-and `models/stage_training.png`, then exports `models/stage.onnx`.
+writes `backend/models/stage_report.md` (accuracy, MAE/MSE/RMSE/MAPE, per-stage results, confusion matrix)
+and `backend/models/stage_training.png`, then exports `backend/models/stage.onnx`.
 
 First result (41 photos): **90 % test accuracy, MAE 0.10 stage**, 19 ms per photo on the Pi 5.
 Seedling and matured are recognised well; **vegetative only 3 of 6**. Add more vegetative photos,
 and photos from your own camera (`data/vision/`), then retrain. Test on photo files without the
-camera: `.venv/bin/python vision.py --stage photo.jpg`.
+camera: `.venv/bin/python backend/vision.py --stage photo.jpg`.
 
 ---
 
@@ -564,12 +569,12 @@ git push
 - [x] HC-SR04 water level sensor (firmware: TRIG GPIO32, ECHO GPIO33)
 - [ ] DS18B20 water temperature (EC temperature compensation)
 - [x] CSV session logs (new file per ESP32 connection)
-- [x] History API (`dashboard/server.py`: `/api/history`, pump runs, vision, CSV export)
-- [x] First dashboard page: live camera photo + sensors + pumps (`dashboard/`)
+- [x] History API (`backend/server.py`: `/api/history`, pump runs, vision, CSV export)
+- [x] First dashboard page: live camera photo + sensors + pumps (`frontend/`)
 - [x] Dashboard Graphs tab (history charts, pump lanes, stage strip) and Calibration tab (EC, pH, tank)
 - [x] Plant camera (MaixCAM over USB): photos + leaf colour health check, publishing to `hydro/vision`
 - [x] Lettuce growth-stage image dataset: 41 photos in 3 stages (`dataset/lettuce_growth_stages/`)
-- [x] Camera AI model for growth stage + size (`models/stage.onnx`, 90 % test accuracy)
+- [x] Camera AI model for growth stage + size (`backend/models/stage.onnx`, 90 % test accuracy)
 - [ ] More vegetative + own-camera photos, retrain (vegetative recall is 50 %)
 - [ ] MQTT password + ACL for `hydro/cmd`
 - [x] Relay test: Pump A and Pump B (`Relay_Test/`)

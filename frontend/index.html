@@ -856,7 +856,7 @@ async function loadGraphs() {
     $("g-msg").textContent = "";
   } catch (e) {
     console.warn("history", e);
-    $("g-msg").textContent = "History not available: is dashboard/server.py running?";
+    $("g-msg").textContent = "History not available: is backend/server.py running?";
   }
   renderGraphs();
   if (currentTab === "graphs") gTimer = setTimeout(loadGraphs, REFRESH_MS[gRange]);

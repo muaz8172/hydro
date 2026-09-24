@@ -4,7 +4,7 @@ After=mosquitto.service
 Wants=mosquitto.service
 
 [Service]
-ExecStart=/home/hydro/hydro/.venv/bin/python /home/hydro/hydro/vision.py
+ExecStart=/home/hydro/hydro/.venv/bin/python /home/hydro/hydro/backend/vision.py
 Restart=always
 RestartSec=10
 User=hydro

@@ -8,7 +8,7 @@ Plant camera -> MQTT (offline, local only)
   (saving every 10 s would be ~150 MB/day)
 - Checks leaf colour (green vs yellow/brown share) and gives a health result:
   healthy / check / unhealthy / no_plant. This is a colour rule, not an AI model
-- Runs the growth-stage model (models/stage.onnx, trained by train/train_stage.py) on every photo:
+- Runs the growth-stage model (backend/models/stage.onnx, trained by backend/train/train_stage.py) on every photo:
   stage seedling / vegetative / matured, size small / medium / large (size follows stage).
   Below 60 % confidence the stage is "uncertain". Needs onnxruntime (in .venv); without it the
   stage fields are left out and everything else still works
@@ -19,8 +19,8 @@ Plant camera -> MQTT (offline, local only)
   and writes data/vision/live/latest.jpg + latest.json (HTTP fallback for the dashboard)
 - Photos older than 30 days are deleted, except the first photo of each day
 
-Test with: .venv/bin/python vision.py --once
-     .venv/bin/python vision.py --stage photo.jpg   (stage model only, no camera/MQTT)
+Test with: .venv/bin/python backend/vision.py --once
+     .venv/bin/python backend/vision.py --stage photo.jpg   (stage model only, no camera/MQTT)
 """
 
 import csv
@@ -47,7 +47,8 @@ TOPIC_IMAGE  = "hydro/vision/image"
 TOPIC_STATUS = "hydro/vision/status"
 TOPIC_CMD    = "hydro/vision/cmd"
 
-VISION_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "vision")
+ROOT       = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # repo root (backend/..)
+VISION_DIR = os.path.join(ROOT, "data", "vision")
 CSV_PATH   = os.path.join(VISION_DIR, "vision_log.csv")
 LIVE_DIR   = os.path.join(VISION_DIR, "live")     # latest.jpg + latest.json, served by the
                                                   # dashboard as an HTTP fallback to MQTT

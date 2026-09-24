@@ -5,7 +5,7 @@ Hydro Cam - MaixPy app for the Sipeed MaixCAM (runs ON the camera, not the Pi)
     GET http://10.122.173.1:8080/snap.jpg   -> JPEG
     GET http://10.122.173.1:8080/status     -> JSON
 - Only answers the Pi's USB subnets (10.122.x.x), not the WiFi network
-The Pi side is vision.py (fetches a photo every 15 min, checks leaf colour, publishes to MQTT).
+The Pi side is backend/vision.py (fetches a photo every 15 min, checks leaf colour, publishes to MQTT).
 """
 
 import json

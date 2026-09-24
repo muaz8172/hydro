@@ -25,7 +25,8 @@ TOPIC_DATA = "hydro/sensors"
 TOPIC_LOG  = "hydro/log"
 TOPIC_CMD  = "hydro/cmd"
 
-LOG_DIR    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "logs")
+ROOT       = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # repo root (backend/..)
+LOG_DIR    = os.path.join(ROOT, "data", "logs")
 LOG_FIELDS = ["temp", "hum", "ec", "ec_low", "ph", "level", "level_pct", "level_low",
               "dist_cm", "ec_mv", "po_mv", "pump_a", "pump_b", "pump_auto", "pump_sample"]
 

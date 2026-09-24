@@ -9,8 +9,8 @@ Both start from MobileNetV3-Small pretrained on ImageNet. Reports train vs test
 accuracy, MAE, MSE, RMSE and MAPE (on the 1/2/3 stage number) against two
 baselines, then trains the better model on all photos and exports it to ONNX.
 
-Run:  .venv/bin/python train/train_stage.py
-Out:  models/stage.onnx, stage_labels.json, stage_report.md,
+Run:  .venv/bin/python backend/train/train_stage.py
+Out:  backend/models/stage.onnx, stage_labels.json, stage_report.md,
       stage_training.png, stage_predictions.csv
 """
 import csv
@@ -27,9 +27,10 @@ from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
 from sklearn.model_selection import StratifiedKFold
 from torchvision import models, transforms
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(BACKEND)                    # repo root
 DATA = os.path.join(ROOT, "dataset", "lettuce_224")
-OUT = os.path.join(ROOT, "models")
+OUT = os.path.join(BACKEND, "models")
 
 STAGES = ["seedling", "vegetative", "matured"]
 SIZES = ["small", "medium", "large"]
@@ -306,10 +307,10 @@ def write_report(y, results, oofs, best, ms, mb):
     L.append(f"\nTrain vs test accuracy gap: {gap:.0%} "
              f"({'large: the model memorises its training photos' if gap > 0.2 else 'acceptable'}).\n")
     L.append("## Exported model\n")
-    L.append(f"`models/stage.onnx` ({names[best]}, trained on all {n} photos), {mb:.1f} MB, "
+    L.append(f"`backend/models/stage.onnx` ({names[best]}, trained on all {n} photos), {mb:.1f} MB, "
              f"{ms:.0f} ms per photo on this Raspberry Pi 5 (ONNX Runtime, CPU).\n")
-    L.append("Loss curves: `models/stage_training.png`. Per-photo predictions: "
-             "`models/stage_predictions.csv`.\n")
+    L.append("Loss curves: `backend/models/stage_training.png`. Per-photo predictions: "
+             "`backend/models/stage_predictions.csv`.\n")
     open(os.path.join(OUT, "stage_report.md"), "w").write("\n".join(L))
 
 

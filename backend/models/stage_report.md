@@ -46,6 +46,6 @@ Train vs test accuracy gap: 10% (acceptable).
 
 ## Exported model
 
-`models/stage.onnx` (A: Classifier, trained on all 41 photos), 6.1 MB, 19 ms per photo on this Raspberry Pi 5 (ONNX Runtime, CPU).
+`backend/models/stage.onnx` (A: Classifier, trained on all 41 photos), 6.1 MB, 19 ms per photo on this Raspberry Pi 5 (ONNX Runtime, CPU).
 
-Loss curves: `models/stage_training.png`. Per-photo predictions: `models/stage_predictions.csv`.
+Loss curves: `backend/models/stage_training.png`. Per-photo predictions: `backend/models/stage_predictions.csv`.

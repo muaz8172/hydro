@@ -394,12 +394,12 @@
 const STALE_MS = 10000;          // sensor data older than this -> tile greys out
 const CAM_STALE_MS = 30000;      // camera photo older than this -> "Camera: no new photo"
 
-// Target bands (must match EC_MIN/EC_MAX/PH_MIN/PH_MAX in firmware/Full_code/Full_code.ino)
+// Target bands (must match EC_MIN/EC_MAX/PH_MIN/PH_MAX/TEMP_MIN/TEMP_MAX in firmware/Full_code/Full_code.ino)
 const SENSORS = [
   { key: "ph",        label: "pH",          unit: "",      band: [5.5, 6.5], scale: [4.5, 7.5], dec: 2 },
   { key: "ec",        label: "EC",          unit: "mS/cm", band: [1.2, 1.8], scale: [0.6, 2.4], dec: 2 },
   { key: "level_pct", label: "Water level", unit: "%",     band: [20, 100],  scale: [0, 100],   dec: 0 },
-  { key: "temp",      label: "Air temp",    unit: "°C",    band: [18, 26],   scale: [14, 30],   dec: 1 },
+  { key: "temp",      label: "Air temp",    unit: "°C",    band: [25, 36],   scale: [20, 40],   dec: 1 },
   { key: "hum",       label: "Humidity",    unit: "%",     band: [50, 75],   scale: [30, 90],   dec: 1 },
 ];
 const PUMPS = [
@@ -680,7 +680,7 @@ pollLive();
 const G_SERIES = [
   { key: "ph",   label: "pH",       unit: "",      band: [5.5, 6.5], scale: [5.0, 7.0], dec: 2 },
   { key: "ec",   label: "EC",       unit: "mS/cm", band: [1.2, 1.8], scale: [0.8, 2.0], dec: 2 },
-  { key: "temp", label: "Air temp", unit: "°C",    band: [18, 26],   scale: [14, 30],   dec: 1 },
+  { key: "temp", label: "Air temp", unit: "°C",    band: [25, 36],   scale: [20, 40],   dec: 1 },
   { key: "hum",  label: "Humidity", unit: "%",     band: [50, 75],   scale: [40, 85],   dec: 1 },
 ];
 const RANGE_NOTE = { "1h": "Last hour · every 2 s", "24h": "Last 24 h · 1-min averages", "7d": "Last 7 days · 10-min averages" };

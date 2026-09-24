@@ -107,7 +107,7 @@ The EC library is **not** installed from the Library Manager. Use the patched `D
 4. You should see one JSON line every 2 seconds:
 
 ```json
-{"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,"level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,"pump_a":true,"pump_b":true,"pump_auto":true,"pump_sample":true}
+{"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,"level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,"pump_a":true,"pump_b":true,"pump_auto":true,"pump_sample":true,"temp_ok":true}
 ```
 
 | Field | Meaning |
@@ -124,6 +124,7 @@ The EC library is **not** installed from the Library Manager. Use the patched `D
 | `pump_a`, `pump_b` | Pump A / Pump B relay state |
 | `pump_auto` | `true` = pumps in auto (EC/pH) mode, `false` = manual |
 | `pump_sample` | Sampling pump relay state |
+| `temp_ok` | `true` = air temperature inside 25–36 °C (`TEMP_MIN`/`TEMP_MAX`), `null` = no DHT22 reading. Only reported; nothing heats or cools |
 
 Lines starting with `#` or `>>>` are messages, not data.
 

@@ -410,7 +410,7 @@ backend/
 - Run a full EC calibration with real buffers through the wizard and confirm `status` shows the new K-values.
 
 ## Open decisions
-- Air temperature and humidity target bands for your room (placeholder: 18–26 °C, 50–75 %).
+- ~~Air temperature band~~: decided 25–36 °C (2026-09-24, `TEMP_MIN`/`TEMP_MAX` in the firmware, reported as `temp_ok`). Humidity band still a placeholder (50–75 %).
 - Whether the Pi drives a touchscreen kiosk (this affects the default layout and touch sizing).
 - ~~Which GPIO pins drive the relays~~: decided (GPIO25/26/27, active LOW).
 - Maximum continuous run for Pump A/B in the firmware, and the dashboard "ON long" warning time (placeholder 10 min).

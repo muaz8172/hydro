@@ -12,7 +12,9 @@
  * Output (every 2 s, one line):
  *   {"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,
  *    "level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,
- *    "pump_a":true,"pump_b":true,"pump_auto":true,"pump_sample":true}
+ *    "pump_a":true,"pump_b":true,"pump_auto":true,"pump_sample":true,"temp_ok":true}
+ *   temp_ok: air temperature inside TEMP_MIN-TEMP_MAX (25-36 C), null if the DHT22 gives no reading.
+ *   Only reported: nothing on the ESP32 heats or cools.
  * Lines starting with '#' or '>>>' are messages, not data.
  *
  * Pumps (auto): Pump A + Pump B run until EC AND pH both reach the target
@@ -56,6 +58,9 @@
 #define EC_MAX         1.8      // mS/cm
 #define PH_MIN         5.5
 #define PH_MAX         6.5
+// Air temperature target (DHT22), reported as temp_ok; no pump or relay acts on it
+#define TEMP_MIN       25.0     // C
+#define TEMP_MAX       36.0     // C
 
 // ---------- Settings ----------
 #define SEND_INTERVAL  2000     // ms between JSON lines
@@ -279,6 +284,7 @@ void printStatus()
   Serial.printf("# Pump %s  A=%s B=%s  stop at target EC %.2f-%.2f and pH %.2f-%.2f\n",
                 pumpAuto ? "AUTO" : "MANUAL", pumpAOn ? "ON" : "OFF", pumpBOn ? "ON" : "OFF",
                 EC_MIN, EC_MAX, PH_MIN, PH_MAX);
+  Serial.printf("# Air temp target %.1f-%.1f C\n", TEMP_MIN, TEMP_MAX);
   Serial.printf("# Sampling pump %s%s\n", sampleOn ? "ON" : "OFF",
                 sampleEnabled ? "" : "  (disabled by sampleoff)");
 }
@@ -476,6 +482,9 @@ void loop()
     Serial.print(",\"pump_b\":");    Serial.print(pumpBOn  ? "true" : "false");
     Serial.print(",\"pump_auto\":"); Serial.print(pumpAuto ? "true" : "false");
     Serial.print(",\"pump_sample\":"); Serial.print(sampleOn ? "true" : "false");
+    Serial.print(",\"temp_ok\":");
+    if (isnan(temp)) Serial.print("null");
+    else Serial.print(temp >= TEMP_MIN && temp <= TEMP_MAX ? "true" : "false");
     Serial.println('}');
 
     if (debugMode) {

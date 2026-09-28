@@ -296,7 +296,7 @@ def write_report(y, results, oofs, best, ms, mb):
     beats = te["mae"] < min(metrics(y, b)["mae"] for b in base.values())
     checks = [("Test accuracy >= 80%", te["acc"] >= 0.8, f"{te['acc']:.0%}"),
               ("Test MAE < 0.3", te["mae"] < 0.3, f"{te['mae']:.2f}"),
-              ("Vegetative recall > 50%", rec[1] > 0.5, f"{rec[1]:.0%}"),
+              ("Vegetative recall >= 70%", rec[1] >= 0.7, f"{rec[1]:.0%}"),
               ("Beats both baselines on MAE", beats, "")]
     L.append("## Pass criteria (chosen model)\n")
     L.append("| Check | Result | Value |")

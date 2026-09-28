@@ -457,23 +457,23 @@ Design and next steps: `docs/dashboard-design-plan.md`.
 > network can do the same. Add a Mosquitto password before using the dashboard on a shared network.
 
 ### 5. Plant image dataset
-`dataset/lettuce_growth_stages/` holds **90 lettuce photos sorted by growth stage**, for training a
-growth-stage model later:
+`dataset/lettuce_growth_stages/` holds **88 lettuce photos sorted by growth stage**, used to train the
+growth-stage model:
 
 | Stage | Photos |
 |---|---|
 | `seedling/` | 30 |
-| `vegetative/` | 30 |
-| `matured/` | 30 |
+| `vegetative/` | 29 |
+| `matured/` | 29 |
 
 The folder name is the label. `labels.csv` lists each photo with its stage, format, size and original
-file name. `dataset/lettuce_224/` has the same 90 photos converted to 224×224 JPEG, with a
+file name. `dataset/lettuce_224/` has the same 88 photos converted to 224×224 JPEG, with a
 `labels.csv` that adds the size (seedling = small, vegetative = medium, matured = large).
 See [`dataset/lettuce_growth_stages/README.md`](dataset/lettuce_growth_stages/README.md).
 
 ### 6. Growth-stage AI model
 `backend/train/train_stage.py` trains a small image model (MobileNetV3-Small) on `dataset/lettuce_224/`,
-on the Pi 5 itself, in about 20 minutes. One-time setup of the Python environment:
+on the Pi 5 itself, in about 40 minutes. One-time setup of the Python environment:
 ```bash
 cd ~/hydro
 python3 -m venv .venv
@@ -489,9 +489,9 @@ It tests with 5-fold cross-validation (every photo is tested once by a model tha
 writes `backend/models/stage_report.md` (accuracy, MAE/MSE/RMSE/MAPE, per-stage results, confusion matrix)
 and `backend/models/stage_training.png`, then exports `backend/models/stage.onnx`.
 
-First result (41 photos): **90 % test accuracy, MAE 0.10 stage**, 19 ms per photo on the Pi 5.
-Seedling and matured are recognised well; **vegetative only 3 of 6**. Add more vegetative photos,
-and photos from your own camera (`data/vision/`), then retrain. Test on photo files without the
+Current result (88 photos, 28 Sep 2026): **86 % test accuracy, MAE 0.16 stage**, 10 ms per photo on
+the Pi 5. Recall: seedling 97 %, **vegetative 79 %** (was 3 of 6 with the first 41 photos), matured 83 %.
+All photos are from the internet: add labelled photos from your own camera (`data/vision/`), then retrain. Test on photo files without the
 camera: `.venv/bin/python backend/vision.py --stage photo.jpg`.
 
 ---
@@ -580,8 +580,8 @@ git push
 - [x] First dashboard page: live camera photo + sensors + pumps (`frontend/`)
 - [x] Dashboard Graphs tab (history charts, pump lanes, stage strip) and Calibration tab (EC, pH, tank)
 - [x] Plant camera (MaixCAM over USB): photos + leaf colour health check, publishing to `hydro/vision`
-- [x] Lettuce growth-stage image dataset: 90 photos in 3 stages (30 each) (`dataset/lettuce_growth_stages/`)
-- [x] Camera AI model for growth stage + size (`backend/models/stage.onnx`, 90 % test accuracy)
+- [x] Lettuce growth-stage image dataset: 88 photos in 3 stages (30 / 29 / 29) (`dataset/lettuce_growth_stages/`)
+- [x] Camera AI model for growth stage + size (`backend/models/stage.onnx`, 86 % test accuracy)
 - [ ] More vegetative + own-camera photos, retrain (vegetative recall is 50 %)
 - [ ] MQTT password + ACL for `hydro/cmd`
 - [x] Relay test: Pump A and Pump B (`firmware/Relay_Test/`)

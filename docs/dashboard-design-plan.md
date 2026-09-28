@@ -237,7 +237,7 @@ So A and B are not short timed doses: in auto they can run for minutes. The card
 
 ### What exists now
 - **Camera:** Sipeed MaixCAM on the Pi's USB (a USB network link, camera at `10.122.173.1`). The `hydro_cam` app on the camera serves `/snap.jpg`. `vision.py` on the Pi fetches a live photo every 10 s and saves one every 15 min (or on `snap` sent to `hydro/vision/cmd`).
-- **Dataset:** `dataset/lettuce_growth_stages/`, 90 photos in class folders (seedling 30, vegetative 30, matured 30), plus a 224×224 JPEG copy in `dataset/lettuce_224/` with `labels.csv` (`file, stage, size, source`). Both are in git.
+- **Dataset:** `dataset/lettuce_growth_stages/`, 88 photos in class folders (seedling 30, vegetative 29, matured 29), plus a 224×224 JPEG copy in `dataset/lettuce_224/` with `labels.csv` (`file, stage, size, source`). Both are in git.
 - **Model:** `backend/models/stage.onnx` (MobileNetV3-Small, 6.1 MB), trained on the Pi by `backend/train/train_stage.py`. It runs with ONNX Runtime in `.venv` in **19 ms per photo** on the Pi 5, so it checks every live photo.
 - **MQTT:** `hydro/vision` (JSON), `hydro/vision/image` (the JPEG, retained), `hydro/vision/status`.
 - **Storage:** `data/vision/YYYY-MM-DD/HH-MM-SS.jpg` plus `data/vision/vision_log.csv`.
@@ -248,8 +248,8 @@ The dataset is labelled by stage only. Size is taken from the stage, so one mode
 | Stage | Size | Photos |
 |---|---|---|
 | Seedling | Small | 30 |
-| Vegetative | Medium | 30 |
-| Matured | Large | 30 |
+| Vegetative | Medium | 29 |
+| Matured | Large | 29 |
 
 There's **no healthy/unhealthy label**, so health stays a rule (below). A Phase 2 health model needs labelled Healthy/Unhealthy photos from your own rack.
 
@@ -416,7 +416,7 @@ backend/
 - Maximum continuous run for Pump A/B in the firmware, and the dashboard "ON long" warning time (placeholder 10 min).
 - Whether A and B should dose in timed pulses instead of running until target (avoids overshoot while sensors settle).
 - What the sampling pump feeds (sensor chamber? tank loop?), for its card's subtitle.
-- ~~The dataset's format~~: decided (class folders, 90 photos; size follows stage).
+- ~~The dataset's format~~: decided (class folders, 88 photos; size follows stage).
 - ~~Which camera~~: decided (Sipeed MaixCAM over USB). Still open: where it's mounted.
 - The sowing/transplant date per batch, and the expected age for each stage.
 - Whether to collect Healthy/Unhealthy photos for a Phase 2 health model.

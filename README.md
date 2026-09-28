@@ -457,17 +457,17 @@ Design and next steps: `docs/dashboard-design-plan.md`.
 > network can do the same. Add a Mosquitto password before using the dashboard on a shared network.
 
 ### 5. Plant image dataset
-`dataset/lettuce_growth_stages/` holds **41 lettuce photos sorted by growth stage**, for training a
+`dataset/lettuce_growth_stages/` holds **90 lettuce photos sorted by growth stage**, for training a
 growth-stage model later:
 
 | Stage | Photos |
 |---|---|
-| `seedling/` | 18 |
-| `vegetative/` | 6 |
-| `matured/` | 17 |
+| `seedling/` | 30 |
+| `vegetative/` | 30 |
+| `matured/` | 30 |
 
 The folder name is the label. `labels.csv` lists each photo with its stage, format, size and original
-file name. `dataset/lettuce_224/` has the same 41 photos converted to 224×224 JPEG, with a
+file name. `dataset/lettuce_224/` has the same 90 photos converted to 224×224 JPEG, with a
 `labels.csv` that adds the size (seedling = small, vegetative = medium, matured = large).
 See [`dataset/lettuce_growth_stages/README.md`](dataset/lettuce_growth_stages/README.md).
 
@@ -580,7 +580,7 @@ git push
 - [x] First dashboard page: live camera photo + sensors + pumps (`frontend/`)
 - [x] Dashboard Graphs tab (history charts, pump lanes, stage strip) and Calibration tab (EC, pH, tank)
 - [x] Plant camera (MaixCAM over USB): photos + leaf colour health check, publishing to `hydro/vision`
-- [x] Lettuce growth-stage image dataset: 41 photos in 3 stages (`dataset/lettuce_growth_stages/`)
+- [x] Lettuce growth-stage image dataset: 90 photos in 3 stages (30 each) (`dataset/lettuce_growth_stages/`)
 - [x] Camera AI model for growth stage + size (`backend/models/stage.onnx`, 90 % test accuracy)
 - [ ] More vegetative + own-camera photos, retrain (vegetative recall is 50 %)
 - [ ] MQTT password + ACL for `hydro/cmd`

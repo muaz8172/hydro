@@ -237,7 +237,7 @@ So A and B are not short timed doses: in auto they can run for minutes. The card
 
 ### What exists now
 - **Camera:** Sipeed MaixCAM on the Pi's USB (a USB network link, camera at `10.122.173.1`). The `hydro_cam` app on the camera serves `/snap.jpg`. `vision.py` on the Pi fetches a live photo every 10 s and saves one every 15 min (or on `snap` sent to `hydro/vision/cmd`).
-- **Dataset:** `dataset/lettuce_growth_stages/`, 41 photos in class folders (seedling 18, vegetative 6, matured 17), plus a 224×224 JPEG copy in `dataset/lettuce_224/` with `labels.csv` (`file, stage, size, source`). Both are in git.
+- **Dataset:** `dataset/lettuce_growth_stages/`, 90 photos in class folders (seedling 30, vegetative 30, matured 30), plus a 224×224 JPEG copy in `dataset/lettuce_224/` with `labels.csv` (`file, stage, size, source`). Both are in git.
 - **Model:** `backend/models/stage.onnx` (MobileNetV3-Small, 6.1 MB), trained on the Pi by `backend/train/train_stage.py`. It runs with ONNX Runtime in `.venv` in **19 ms per photo** on the Pi 5, so it checks every live photo.
 - **MQTT:** `hydro/vision` (JSON), `hydro/vision/image` (the JPEG, retained), `hydro/vision/status`.
 - **Storage:** `data/vision/YYYY-MM-DD/HH-MM-SS.jpg` plus `data/vision/vision_log.csv`.
@@ -247,15 +247,15 @@ The dataset is labelled by stage only. Size is taken from the stage, so one mode
 
 | Stage | Size | Photos |
 |---|---|---|
-| Seedling | Small | 18 |
-| Vegetative | Medium | 6 |
-| Matured | Large | 17 |
+| Seedling | Small | 30 |
+| Vegetative | Medium | 30 |
+| Matured | Large | 30 |
 
 There's **no healthy/unhealthy label**, so health stays a rule (below). A Phase 2 health model needs labelled Healthy/Unhealthy photos from your own rack.
 
 ### Training (done on the Pi 5)
 `.venv/bin/python backend/train/train_stage.py` (about 20 minutes on the Pi 5's CPU):
-1. Starts from MobileNetV3-Small pretrained on ImageNet and fine-tunes it. Augmentation (random crop, flips, ±20° rotation, colour jitter) and class-weighted loss, since vegetative has only 6 photos.
+1. Starts from MobileNetV3-Small pretrained on ImageNet and fine-tunes it. Augmentation (random crop, flips, ±20° rotation, colour jitter) and class-weighted loss (in case the classes are unbalanced).
 2. **5-fold stratified cross-validation**, so every photo is tested once by a model that never saw it. Two models are compared: A (classifier) and B (regression on the stage number 1–3).
 3. Reports train vs test accuracy, **MAE / MSE / RMSE / MAPE** on the stage number (Small = 1, Medium = 2, Large = 3), per-stage precision/recall/F1 and a confusion matrix, against two baselines. Output: `backend/models/stage_report.md`, `stage_training.png`, `stage_predictions.csv`.
 4. Trains the better model on all photos and exports `backend/models/stage.onnx` + `stage_labels.json`.
@@ -274,7 +274,7 @@ Acceptance (unchanged in spirit, adjusted to the tiny dataset): test accuracy �
 
 ### Next for the model
 1. **More vegetative photos**, 10–15 at least.
-2. **Photos from the MaixCAM itself** (`data/vision/`). All 41 training photos come from the internet; the camera sees one fixed view under your grow light, so the real accuracy may be lower than the test score. Label 20–50 camera photos into the three folders and retrain.
+2. **Photos from the MaixCAM itself** (`data/vision/`). All 90 training photos come from the internet; the camera sees one fixed view under your grow light, so the real accuracy may be lower than the test score. Label 20–50 camera photos into the three folders and retrain.
 3. Retrain: `.venv/bin/python backend/train/train_stage.py`, then restart `hydro-vision`. The new `stage.onnx` is picked up at start.
 4. Optional later: run it on the MaixCAM's NPU instead. It needs converting with TPU-MLIR, which runs on an x86 PC, not on the Pi.
 
@@ -416,7 +416,7 @@ backend/
 - Maximum continuous run for Pump A/B in the firmware, and the dashboard "ON long" warning time (placeholder 10 min).
 - Whether A and B should dose in timed pulses instead of running until target (avoids overshoot while sensors settle).
 - What the sampling pump feeds (sensor chamber? tank loop?), for its card's subtitle.
-- ~~The dataset's format~~: decided (class folders, 41 photos; size follows stage).
+- ~~The dataset's format~~: decided (class folders, 90 photos; size follows stage).
 - ~~Which camera~~: decided (Sipeed MaixCAM over USB). Still open: where it's mounted.
 - The sowing/transplant date per batch, and the expected age for each stage.
 - Whether to collect Healthy/Unhealthy photos for a Phase 2 health model.

@@ -678,10 +678,10 @@ pollLive();
 
 // ================= GRAPHS =================
 const G_SERIES = [
-  { key: "ph",   label: "pH",       unit: "",      band: [5.5, 6.5], scale: [5.0, 7.0], dec: 2 },
-  { key: "ec",   label: "EC",       unit: "mS/cm", band: [1.2, 1.8], scale: [0.8, 2.0], dec: 2 },
-  { key: "temp", label: "Air temp", unit: "°C",    band: [25, 36],   scale: [20, 40],   dec: 1 },
-  { key: "hum",  label: "Humidity", unit: "%",     band: [50, 75],   scale: [40, 85],   dec: 1 },
+  { key: "ph",   label: "pH",       unit: "",      band: [5.5, 6.5], scale: [5.0, 7.0], limit: [3, 9],  dec: 2 },
+  { key: "ec",   label: "EC",       unit: "mS/cm", band: [1.2, 1.8], scale: [0.8, 2.0], limit: [0, 4],  dec: 2 },
+  { key: "temp", label: "Air temp", unit: "°C",    band: [25, 36],   scale: [20, 40],   limit: [0, 50], dec: 1 },
+  { key: "hum",  label: "Humidity", unit: "%",     band: [50, 75],   scale: [40, 85],   limit: [0, 100], dec: 1 },
 ];
 const RANGE_NOTE = { "1h": "Last hour · every 2 s", "24h": "Last 24 h · 1-min averages", "7d": "Last 7 days · 10-min averages" };
 const REFRESH_MS = { "1h": 10000, "24h": 60000, "7d": 120000 };
@@ -717,7 +717,9 @@ function buildCharts() {
       scales: {
         x: { time: true },
         y: { range: (u, mn, mx) => {
-          const lo = mn == null ? s.scale[0] : Math.min(s.scale[0], mn), hi = mx == null ? s.scale[1] : Math.max(s.scale[1], mx);
+          // widen to fit the data, but never past the limit so one wild reading can't flatten the chart
+          const lo = mn == null ? s.scale[0] : Math.max(s.limit[0], Math.min(s.scale[0], mn)),
+                hi = mx == null ? s.scale[1] : Math.min(s.limit[1], Math.max(s.scale[1], mx));
           const pad = (hi - lo) * 0.04; return [lo - pad, hi + pad];
         } },
       },

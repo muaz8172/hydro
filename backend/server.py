@@ -108,6 +108,8 @@ def history(q):
             v = num(r.get(s))
             if s == "ec" and r.get("ec_low") == "1":
                 v = None                                  # below the sensor floor, not a real value
+            if s == "ph" and v is not None and not 0 <= v <= 14:
+                v = None                                  # outside the pH scale: probe fault, not a reading
             if v is not None:
                 sums[s][i] += v
                 cnts[s][i] += 1

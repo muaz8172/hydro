@@ -1257,15 +1257,17 @@ $("btn-table").addEventListener("click", (e) => {
 // Commands go to hydro/cmd (bridge.py forwards them to the ESP32); replies arrive on hydro/log.
 const WIZ = {
   ec: {
-    title: "EC probe", field: "ec_mv", unit: "mV", minWait: 20, tol: (m) => Math.max(Math.abs(m) * 0.01, 3),
+    // The EC signal is noisy (about ±14 mV at rest), so steadiness is judged by drift: the mean of
+    // the last 10 s against the 10 s before must agree within 2 % (at least 5 mV).
+    title: "EC probe", field: "ec_mv", unit: "mV", minWait: 20, drift: true, tol: (m) => Math.max(Math.abs(m) * 0.02, 5),
     exit: "exitec",
     steps: [
       { name: "Start", h: "Enter EC calibration mode", how: ["Take the EC probe out of the tank.", "Rinse it with distilled water and dab it dry."],
         cmd: "enterec", ok: /Enter EC Calibration Mode/i, err: /Command Error/i },
       { name: "1413 µS/cm", h: "Low buffer: 1413 µS/cm", how: ["Put the probe in the 1413 µS/cm buffer.", "Stir gently once, then keep it still."],
-        cmd: "calec", expect: 230, ok: /Successful,K/i, err: /Buffer Solution Error|Failed|Command Error/i },
+        cmd: "calec", expect: 230, accept: [148, 311], ok: /Successful,K/i, err: /Buffer Solution Error|Failed|Command Error/i },
       { name: "12.88 mS/cm", h: "High buffer: 12.88 mS/cm", how: ["Rinse the probe and dab it dry.", "Put it in the 12.88 mS/cm buffer and keep it still."],
-        cmd: "calec", expect: 2100, ok: /Successful,K/i, err: /Buffer Solution Error|Failed|Command Error/i },
+        cmd: "calec", expect: 2100, accept: [1476, 2755], ok: /Successful,K/i, err: /Buffer Solution Error|Failed|Command Error/i },
       { name: "Save", h: "Save and exit", how: ["Saves both K values in the ESP32's memory.", "Afterwards, rinse the probe and put it back in the tank."],
         cmd: "exitec", ok: /Calibration Successful/i, err: /Calibration Failed/i },
       { name: "Done", h: "EC calibrated", how: ["The new K values are shown under Stored calibration.", "Put the probe back in the tank."], done: true },
@@ -1310,15 +1312,21 @@ const cal = (() => {
     if (s.done || s.name === "Start" || s.name === "Save") return { ok: true, skip: true };
     const fresh = now() - lastAt < STALE_MS;
     const win = samples.filter((x) => now() - x.t <= 10000).map((x) => x.v);
+    const prev = samples.filter((x) => now() - x.t > 10000 && now() - x.t <= 20000).map((x) => x.v);
     const waitLeft = Math.max(0, w.minWait - (now() - stepAt) / 1000);
+    const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
     if (!fresh) return { ok: false, text: "No readings from the ESP32" };
-    if (win.length < 4) return { ok: false, text: "Collecting readings…", prog: win.length / 4 * 0.3 };
-    const mn = Math.min(...win), mx = Math.max(...win), mean = win.reduce((a, b) => a + b, 0) / win.length;
-    const tol = w.tol(mean), vary = mx - mn, steady = vary <= tol;
+    if (win.length < 4 || (w.drift && prev.length < 4)) return { ok: false, text: "Collecting readings…", prog: win.length / 4 * 0.3 };
+    const mean = avg(win), tol = w.tol(mean);
+    const vary = w.drift ? Math.abs(mean - avg(prev)) : Math.max(...win) - Math.min(...win), steady = vary <= tol;
     const fmt = (x) => x.toFixed(w.unit === "cm" ? 1 : 0) + " " + w.unit;
-    if (waitLeft > 0) return { ok: false, text: `Settling: wait ${Math.ceil(waitLeft)} s more · varied ${fmt(vary)} over 10 s`, prog: 1 - waitLeft / w.minWait };
-    if (!steady) return { ok: false, text: `Still moving: varied ${fmt(vary)} over 10 s (needs ≤ ${fmt(tol)})`, prog: 0.9 };
-    return { ok: true, text: `Stable: varied ${fmt(vary)} over the last 10 s` };
+    const what = w.drift ? "drifted" : "varied";
+    // the ESP32 rejects a buffer outside its window, so don't let a doomed capture go out
+    if (s.accept && (mean < s.accept[0] || mean > s.accept[1]))
+      return { ok: false, text: `Reading ${fmt(mean)} is outside ${s.accept[0]}–${s.accept[1]} mV, the range the ESP32 accepts for this buffer`, prog: 0 };
+    if (waitLeft > 0) return { ok: false, text: `Settling: wait ${Math.ceil(waitLeft)} s more · ${what} ${fmt(vary)} over 10 s`, prog: 1 - waitLeft / w.minWait };
+    if (!steady) return { ok: false, text: `Still moving: ${what} ${fmt(vary)} over 10 s (needs ≤ ${fmt(tol)})`, prog: 0.9 };
+    return { ok: true, text: `Stable: ${what} ${fmt(vary)} over the last 10 s` };
   }
 
   function render() {

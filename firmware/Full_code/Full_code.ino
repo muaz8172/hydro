@@ -32,12 +32,12 @@
  *   status = show calibration values
  *   debug  = toggle human-readable lines
  *
- * Requires the patched DFRobot_EC.cpp
+ * EC conversion and calibration are done here (same maths as DFRobot_EC); that library's
+ * calibration() corrupted the ESP32 flash lock, see the EC section.
  */
 
 #include <DHT.h>
 #include <EEPROM.h>
-#include "DFRobot_EC.h"
 #include "esp_flash.h"
 
 // ---------- Crash hunt (temporary) ----------
@@ -90,14 +90,13 @@ void probe(const char* step)
 
 // ---------- EEPROM layout ----------
 #define EEPROM_SIZE      48
-#define EC_KADDR         0x0A   // EC library: bytes 10-17
+#define EC_KADDR         0x0A   // EC K values: bytes 10-17 (same place DFRobot_EC used)
 #define PH_ADDR_V7       0x14   // pH: bytes 20-27
 #define PH_ADDR_V4       0x18
 #define TANK_ADDR_EMPTY  0x1C   // tank: bytes 28-35
 #define TANK_ADDR_FULL   0x20
 
 DHT dht(DHT_PIN, DHT_TYPE);
-DFRobot_EC ec;
 
 float waterTemp    = 25.0;      // fixed until a DS18B20 is added
 float lastAirTemp  = 25.0;      // from DHT22, used for sound speed
@@ -141,6 +140,77 @@ float readEcVoltage()
     delay(2);
   }
   return sum / (float)EC_SAMPLES;
+}
+
+// ---------- EC conversion and calibration ----------
+// Same maths and command replies as DFRobot_EC (K=1 probe, RES2 820, ECREF 200, so raw EC in
+// mS/cm = mV / 164), written out here because that library's calibration() corrupted the ESP32
+// flash mutex: even "calec" outside calibration mode made the next flash access assert in
+// spi_flash_op_lock, so no EC save ever reached flash.
+#define EC_MV_PER_MS 164.0      // 820 * 200 / 1000
+float ecKLow = 1.0, ecKHigh = 1.0, ecK = 1.0;   // K for the 1413 and 12.88 ranges, K in use
+bool  ecCalMode = false;
+float ecNewLow = NAN, ecNewHigh = NAN;          // captured this session, saved by exitec
+
+void loadEcCal()
+{
+  EEPROM.get(EC_KADDR, ecKLow);
+  EEPROM.get(EC_KADDR + 4, ecKHigh);
+  if (!(ecKLow  > 0.5 && ecKLow  < 1.5)) ecKLow  = 1.0;   // also catches FF (never saved)
+  if (!(ecKHigh > 0.5 && ecKHigh < 1.5)) ecKHigh = 1.0;
+  ecK = ecKLow;
+}
+
+float ecFromMv(float mv, float temp)
+{
+  float raw = mv / EC_MV_PER_MS;
+  float v = raw * ecK;                           // switch range with a little hysteresis
+  if (v > 2.5)      ecK = ecKHigh;
+  else if (v < 2.0) ecK = ecKLow;
+  return raw * ecK / (1.0 + 0.0185 * (temp - 25.0));
+}
+
+bool ecIsLowBuffer(float raw)  { return raw > 0.9 && raw < 1.9; }    // 1413 uS/cm
+bool ecIsHighBuffer(float raw) { return raw > 9.0 && raw < 16.8; }   // 12.88 mS/cm
+
+void ecCommand(const char* cmd, float mv, float temp)
+{
+  if (!strcmp(cmd, "ENTEREC")) {
+    ecCalMode = true;
+    ecNewLow = ecNewHigh = NAN;
+    Serial.println(">>>Enter EC Calibration Mode<<<");
+    Serial.println(">>>Please put the probe into the 1413us/cm or 12.88ms/cm buffer solution<<<");
+    return;
+  }
+  if (!ecCalMode) {                              // calec / exitec without enterec
+    Serial.println(">>>Command Error<<<");
+    return;
+  }
+  if (!strcmp(cmd, "CALEC")) {
+    float raw = mv / EC_MV_PER_MS, buffer;
+    if (ecIsLowBuffer(raw))       buffer = 1.413;
+    else if (ecIsHighBuffer(raw)) buffer = 12.88;
+    else { Serial.println(">>>Buffer Solution Error Try Again<<<"); return; }
+    float k = buffer * (1.0 + 0.0185 * (temp - 25.0)) * EC_MV_PER_MS / mv;
+    if (!(k > 0.5 && k < 1.5)) { Serial.println(">>>Failed,Try Again<<<"); return; }
+    if (buffer < 2) ecNewLow = k; else ecNewHigh = k;
+    Serial.printf(">>>Successful,K:%.2f, Send EXITEC to Save and Exit<<<\n", k);
+    return;
+  }
+  // EXITEC: save every K captured this session (the other one keeps its stored value)
+  ecCalMode = false;
+  if (isnan(ecNewLow) && isnan(ecNewHigh)) {
+    Serial.println(">>>Calibration Failed,Exit EC Calibration Mode<<<");
+    return;
+  }
+  if (!isnan(ecNewLow))  ecKLow  = ecNewLow;
+  if (!isnan(ecNewHigh)) ecKHigh = ecNewHigh;
+  ecK = ecKLow;
+  EEPROM.put(EC_KADDR, ecKLow);
+  EEPROM.put(EC_KADDR + 4, ecKHigh);
+  bool saved = EEPROM.commit();
+  Serial.println(saved ? "# EC K values written to flash" : "# EC K values NOT written to flash (EEPROM.commit failed)");
+  Serial.println(">>>Calibration Successful,Exit EC Calibration Mode<<<");
 }
 
 // ================= pH =================
@@ -315,7 +385,7 @@ void handleCommand(char* cmd)
   for (char* p = cmd; *p; p++) *p = toupper((unsigned char)*p);
 
   if (!strcmp(cmd, "ENTEREC") || !strcmp(cmd, "CALEC") || !strcmp(cmd, "EXITEC")) {
-    ec.calibration(ecVoltage, waterTemp, cmd);        // patched library commits on exitec
+    ecCommand(cmd, ecVoltage, waterTemp);
 
   } else if (!strcmp(cmd, "PH7")) {
     float po = readPhPo();
@@ -455,8 +525,8 @@ void setup()
   pinMode(ECHO_PIN, INPUT);
   digitalWrite(TRIG_PIN, LOW);
   dht.begin();
-  for (int i = 0; i < 8; i++) ecBootBytes[i] = EEPROM.read(EC_KADDR + i);   // before ec.begin() fills defaults
-  ec.begin();
+  for (int i = 0; i < 8; i++) ecBootBytes[i] = EEPROM.read(EC_KADDR + i);   // raw, for status
+  loadEcCal();
   loadPhCal();
   loadTankCal();
 
@@ -483,8 +553,8 @@ void loop()
 
     ecVoltage     = readEcVoltage();
     probe("EC ADC");
-    float ecValue = ec.readEC(ecVoltage, waterTemp);
-    probe("EC library");
+    float ecValue = ecFromMv(ecVoltage, waterTemp);
+    probe("EC maths");
 
     float po = readPhPo();
     float ph = phFromPo(po);

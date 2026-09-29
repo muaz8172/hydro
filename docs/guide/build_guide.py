@@ -18,8 +18,8 @@ from reportlab.platypus import (Flowable, KeepTogether, PageBreak, Paragraph, Si
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), "Hydro_System_Guide.pdf")
-VERSION = "3"
-DATE = "28 September 2026"
+VERSION = "4"
+DATE = "29 September 2026"
 
 FONTS = "/usr/share/fonts/truetype/dejavu"
 pdfmetrics.registerFont(TTFont("Sans", f"{FONTS}/DejaVuSans.ttf"))
@@ -209,7 +209,7 @@ def draw_overview(d):
           ["log_NNNN_date_time.csv", "one file per ESP32", "connection"])
     d.box(174, 98, 134, 40, "Mosquitto (MQTT)", ["1883 local · 9001 websocket"], "grey")
     d.box(348, 86, 134, 60, "Dashboard :8000",
-          ["server.py + frontend/", "Overview · Graphs ·", "Calibration tabs"], "blue")
+          ["server.py + frontend/", "Live Monitoring ·", "History · Calibration"], "blue")
     d.box(0, 162, 134, 72, "Sipeed MaixCAM",
           ["hydro_cam app (auto-start)", "live preview on its screen", "GET /snap.jpg 640×480",
            "USB network: 10.122.173.1"], "green")
@@ -305,7 +305,14 @@ def cover():
     s += [Spacer(1, 8)]
     s += callout(
         f"<b>What's new in version {VERSION}</b><br/>"
-        f"• <b>New plant dataset:</b> {M['photos']} lettuce photos, balanced across the three "
+        "• <b>Minimalist dashboard</b> titled Hydroponic System Monitoring, with tabs Live "
+        "Monitoring, Sensor History and Calibration, and DM Sans + Fraunces fonts (stored "
+        "offline). The camera frame is square and shows the same centre crop the stage model "
+        "sees (the dataset is 224×224). Sensor tiles show a green dot or a short tag (LOW, "
+        "HIGH, DRIFT); raw values move to hover tooltips. New Plant vision card (canopy with "
+        "change vs yesterday, yellowing, green index); a small 24 h graph follows the tile you "
+        "click; each sensor has its own colour on Sensor History. See section 3.6.<br/>"
+        f"• Version 3: <b>New plant dataset:</b> {M['photos']} lettuce photos, balanced across the three "
         f"stages (seedling {M['per_stage'][0]}, vegetative {M['per_stage'][1]}, matured "
         f"{M['per_stage'][2]}), all resized to 224×224 for training. Before: 41 photos with only "
         "6 vegetative.<br/>"
@@ -313,7 +320,7 @@ def cover():
         f"{M['acc']} test accuracy, vegetative recall {M['recall'][1]} "
         "(target raised from 50 % to 70 %). See section 3.5.<br/>"
         "• Version 2 changes are still in place: two 2-channel relays (section 2.1), air "
-        f"temperature target 25–36 °C ({c('temp_ok')}), Overview/Graphs/Calibration tabs, and "
+        f"temperature target 25–36 °C ({c('temp_ok')}), the three dashboard tabs, and "
         f"the {c('frontend/')}, {c('backend/')}, {c('firmware/')} layout.")
     return s + [PageBreak()]
 
@@ -508,21 +515,25 @@ def how_it_works():
     s += [H2("3.6 Dashboard"),
           P(f"A web page served by {c('backend/server.py')} on port 8000 (page files in "
             f"{c('frontend/')}). Live values come from Mosquitto's websocket (port 9001); history "
-            f"comes from the session CSVs. Everything works offline (mqtt.js and uPlot are in "
-            f"{c('frontend/vendor/')}).")]
+            f"comes from the session CSVs. Everything works offline (mqtt.js, uPlot and the DM Sans "
+            f"and Fraunces fonts are in {c('frontend/vendor/')}).")]
     s += table([["Tab", "What it shows"],
-                ["Overview", "Sensor tiles (pH, EC, water level, air temp 25–36 °C, humidity) with "
-                             "target band and status; pump cards for Nutrient A, Nutrient B and "
-                             "Sampling (ON/OFF and for how long); pump mode and tank state; the live "
-                             "camera photo with health, growth stage and size; connection dots for "
-                             "MQTT, ESP32 and camera"],
-                ["Graphs", "pH, EC, air temperature and humidity for 1 h, 24 h or 7 days with the "
-                           "target band shaded; pump ON lanes; plant stage over time; Table view "
-                           "and Download CSV"],
+                ["Live Monitoring", "Header: Live dot, ESP32 and Camera shown as Connected (green) or "
+                             "Disconnected/Offline (red). Left: the camera photo in a square frame, "
+                             "the same centre crop the stage model sees, with health, growth stage, "
+                             "size, confidence and Save photo. Right: six small tiles (pH, EC, water, "
+                             "air 25–36 °C, humidity, pump mode + tank) with a meter and a green dot "
+                             "or LOW/HIGH/DRIFT tag; pump rows; Plant vision (canopy % with change vs "
+                             "yesterday, yellowing % with Normal under 8 %, green index 0–1); a small "
+                             "24 h graph of the tile you click. Hover for details and raw values"],
+                ["Sensor History", "pH (purple), EC (blue), air temperature (orange) and humidity (teal) "
+                           "as smooth lines with a soft fill, for 1 h, 24 h or 7 days; target band "
+                           "tinted, gaps hatched, hover shows values on all four; pump ON lanes and "
+                           "plant stage over time; Table view and CSV download"],
                 ["Calibration", "Step-by-step EC, pH and tank wizards. Capture buttons stay "
                                 "disabled until the reading is steady; the ESP32's replies show in "
                                 "the page; stored calibration and a hold-to-reset for pH"]],
-               [0.18, 0.82])
+               [0.2, 0.8])
     s += table([["History API (server.py)", "Returns"],
                 ["/api/history?range=1h|24h|7d", "Readings on a fixed time grid (null = no data)"],
                 ["/api/actuators/history?range=...", "Pump ON intervals, runs and on-time per pump"],
@@ -575,7 +586,7 @@ def done():
                           "plus a 224×224 copy with size labels", "Done"],
             ["Camera AI", f"Growth-stage + size model retrained on {M['photos']} photos "
                           f"({M['acc']} test accuracy, vegetative recall {M['recall'][1]})", "Done"],
-            ["Dashboard", "Overview, Graphs and Calibration tabs; history API and CSV export", "Done"],
+            ["Dashboard", "Live Monitoring, Sensor History and Calibration tabs; history API and CSV export", "Done"],
             ["Repository", f"Reorganised into {c('frontend/')}, {c('backend/')}, {c('firmware/')}",
              "Done"],
             ["Camera AI", "Label photos from the Hydro camera and add them to the dataset, then "
@@ -608,8 +619,12 @@ def done():
                 ["e59755a", "1-channel relay replaced by a second 2-channel relay"],
                 ["d131785", "New lettuce dataset: 90 photos (30 per stage)"],
                 ["f962ca6", "System guide version 2"],
-                ["(this version)", "Duplicate photo removed (88 photos), growth-stage model "
-                                   "retrained, system guide version 3"]], [0.26, 0.74])
+                ["5dfbf3f", "Duplicate photo removed (88 photos), growth-stage model "
+                            "retrained, system guide version 3"],
+                ["827a7ce", "Out-of-range pH readings ignored in history; graph axes capped"],
+                ["42c3365", "Minimalist dashboard: new header and tab names, square camera "
+                            "frame, Plant vision card, coloured sensor graphs, DM Sans + Fraunces"],
+                ["(this version)", "System guide version 4"]], [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],
               ["ESP32 + bridge", "Running · sending data with pump columns (log #0007, 23 Sep)"],

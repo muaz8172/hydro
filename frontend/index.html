@@ -168,7 +168,7 @@
   button.tile { align-items: stretch; justify-content: flex-start; min-height: 0; font: inherit; color: inherit; background: var(--card); border-radius: var(--radius); }
   button.tile:hover { background: var(--card); border-color: var(--line-strong); }
   button.tile:active { transform: none; }
-  .tile[aria-pressed="true"] { border-color: var(--ink); }
+  .tile.wide { grid-column: span 2; }
   .tile .top { display: flex; justify-content: space-between; align-items: center; min-height: 20px; font-size: 13px; color: var(--muted); }
   .tile .top .dot { width: 6px; height: 6px; }
   .value { font: 30px/1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
@@ -210,7 +210,23 @@
   .vcol .note { font-size: 11.5px; color: var(--muted); min-height: 17px; }
 
   /* overview graph */
-  .mini { flex: 1; min-height: 110px; display: flex; flex-direction: column; padding: 12px 16px 6px; cursor: pointer; }
+  /* water tank: level from the ultrasonic sensor, drawn as an animated tank */
+  .tank { flex: 1; min-height: 0; display: flex; align-items: center; gap: 28px; padding: 16px 20px; }
+  .tank svg { flex-shrink: 0; overflow: visible; }
+  .tank .level { transition: transform 1.2s var(--ease-out); }
+  .tank .wave-a { animation: drift 3.2s linear infinite; }
+  .tank .wave-b { animation: drift2 4.6s linear infinite; }
+  .tank .bub { animation: rise 4s ease-in infinite; }
+  .tank .b2 { animation-delay: 1.3s; } .tank .b3 { animation-delay: 2.6s; }
+  .tank.empty .bub, .tank.empty .wave-a, .tank.empty .wave-b { animation-play-state: paused; }
+  @keyframes drift { from { transform: translateX(0); } to { transform: translateX(70px); } }
+  @keyframes drift2 { from { transform: translateX(0); } to { transform: translateX(-56px); } }
+  @keyframes rise { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 0.6; } 100% { transform: translateY(-90px); opacity: 0; } }
+  .tank .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .tank .big { display: flex; align-items: baseline; gap: 12px; }
+  .tank .big b { font: 400 48px/1 var(--sans); letter-spacing: -0.03em; color: var(--ink); }
+  .tank .big b small { font-size: 16px; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
+  .tank .facts { display: flex; gap: 28px; border-top: 1px solid var(--line); padding-top: 12px; }
 
   /* ---------- graphs ---------- */
   #v-graphs { display: flex; flex-direction: column; gap: 16px; }
@@ -329,7 +345,7 @@
     .page { height: auto; min-height: 100vh; padding: 16px; }
     main { grid-template-columns: minmax(0, 1fr); }
     .photo { width: 100%; }
-    .mini { min-height: 180px; }
+    .tank { min-height: 220px; }
     .charts { flex: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 220px; }
     .ginfo { grid-template-columns: minmax(0, 1fr); }
     .tablewrap { min-height: 70vh; }
@@ -339,6 +355,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
+    .tank .wave-a, .tank .wave-b, .tank .bub { animation: none; }
   }
 </style>
 </head>
@@ -389,7 +406,33 @@
           <div class="vcol"><span class="lbl"><i style="background:var(--c-green)"></i>Green index</span><span class="v" id="f-green">—</span><span class="bar"><i id="b-green" style="background:var(--c-green)"></i></span><span class="note">0 – 1</span></div>
         </div>
       </section>
-      <section class="card mini" aria-label="Last 24 hours" id="mini" title="Open Graphs"><div class="plot" id="mini-plot"></div></section>
+      <section class="card tank" aria-label="Water tank" id="tank">
+        <svg width="186" height="176" viewBox="0 36 200 180" aria-hidden="true">
+          <defs>
+            <linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#13b5c9"/><stop offset="1" stop-color="#3d5afe"/></linearGradient>
+            <clipPath id="tankclip"><rect x="24" y="46" width="140" height="160" rx="14"/></clipPath>
+          </defs>
+          <rect x="24" y="46" width="140" height="160" rx="14" fill="#f4f6fe"/>
+          <g clip-path="url(#tankclip)">
+            <g class="level" id="tank-level" style="transform: translateY(160px)">
+              <g class="wave-b"><path d="M-68,49 q14.0,-3 28.0,0 t28.0,0 q14.0,-3 28.0,0 t28.0,0 q14.0,-3 28.0,0 t28.0,0 q14.0,-3 28.0,0 t28.0,0 q14.0,-3 28.0,0 t28.0,0 q14.0,-3 28.0,0 t28.0,0 q14.0,-3 28.0,0 t28.0,0 L324,366 L-88,366 Z" fill="#3d5afe" opacity="0.35"/></g>
+              <g class="wave-a"><path d="M-116,46 q17.5,-4 35.0,0 t35.0,0 q17.5,-4 35.0,0 t35.0,0 q17.5,-4 35.0,0 t35.0,0 q17.5,-4 35.0,0 t35.0,0 q17.5,-4 35.0,0 t35.0,0 q17.5,-4 35.0,0 t35.0,0 L304,366 L-116,366 Z" fill="url(#water)" opacity="0.9"/></g>
+              <g fill="#fff" opacity="0.55"><circle class="bub" cx="58" cy="196" r="2.5"/><circle class="bub b2" cx="104" cy="190" r="2"/><circle class="bub b3" cx="134" cy="198" r="1.6"/></g>
+            </g>
+          </g>
+          <line x1="24" y1="174.0" x2="164" y2="174.0" stroke="#9f2f2d" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.7"/>
+          <text x="170" y="178.0" font-size="10" fill="#9f2f2d" font-family="DM Sans, sans-serif">20%</text>
+          <rect x="24" y="46" width="140" height="160" rx="14" fill="none" stroke="#c9cdeb" stroke-width="2"/>
+        </svg>
+        <div class="info">
+          <h2>Water tank</h2>
+          <div class="big"><b id="tank-pct">—<small>%</small></b><span class="badge" id="tank-badge">No reading</span></div>
+          <div class="facts">
+            <div class="fact"><span>Water height</span><b id="tank-cm">—</b></div>
+            <div class="fact"><span>To surface</span><b id="tank-dist">—</b></div>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
 
@@ -466,7 +509,6 @@ const CAM_STALE_MS = 30000;      // camera photo older than this -> "Camera: no 
 const SENSORS = [
   { key: "ph",        label: "pH",       unit: "",      band: [5.5, 6.5], scale: [4.5, 7.5], dec: 2, raw: ["po_mv"] },
   { key: "ec",        label: "EC",       unit: "mS/cm", band: [1.2, 1.8], scale: [0.6, 2.4], dec: 2, raw: ["ec_mv"] },
-  { key: "level_pct", label: "Water",    unit: "%",     band: [20, 100],  scale: [0, 100],   dec: 0, raw: ["dist_cm", "level"] },
   { key: "temp",      label: "Air",      unit: "°C",    band: [25, 36],   scale: [20, 40],   dec: 1, raw: [] },
   { key: "hum",       label: "Humidity", unit: "%",     band: [50, 75],   scale: [30, 90],   dec: 1, raw: [] },
 ];
@@ -513,7 +555,6 @@ function showTab(name) {
   segSelect($("tabs"), btn);
   for (const v of ["overview", "graphs", "calibration"]) $("v-" + v).hidden = v !== name;
   if (name === "graphs") { placeInd($("ranges")); loadGraphs(); }
-  if (name === "overview") loadMini();
   if (name === "calibration") calOpened();
   try { history.replaceState(null, "", "#" + name); } catch (e) {}
 }
@@ -528,17 +569,16 @@ $("tabs").addEventListener("keydown", (e) => {
 
 // ---------- build static structure once ----------
 // Sensor tiles: label + status, value, meter. Details (target, raw values) live in the tooltip.
-// Clicking a tile picks which sensor the overview graph shows.
+// Clicking a tile opens Sensor History. Water level is shown by the tank card instead of a tile.
 const tileEls = {};
 for (const s of SENSORS) {
   const t = el("button", "card tile");
   t.type = "button";
-  t.setAttribute("aria-pressed", "false");
   t.innerHTML = `
     <span class="top"><span>${s.label}</span><span class="flag"><i class="dot"></i></span></span>
     <span class="value">—<small>${s.unit === "mS/cm" ? "mS" : s.unit}</small></span>
     <span class="meter" aria-hidden="true"><span class="band"></span><span class="mark" hidden></span></span>`;
-  t.addEventListener("click", () => setMini(s.key));
+  t.addEventListener("click", () => showTab("graphs"));
   const [lo, hi] = s.scale;
   const pct = (v) => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
   const band = t.querySelector(".band");
@@ -548,8 +588,8 @@ for (const s of SENSORS) {
   t.title = `${s.label} · target ${s.band[0]}–${s.band[1]} ${s.unit}`.trim();
   $("tiles").appendChild(t);
 }
-// sixth tile: pump mode + tank
-const modeCard = el("div", "card tile");
+// last tile, two columns wide: pump mode + tank
+const modeCard = el("div", "card tile wide");
 modeCard.style.cursor = "default";
 modeCard.title = "A + B stop at EC 1.2–1.8 · pH 5.5–6.5";
 modeCard.innerHTML = `<span class="top"><span>Pump mode</span></span>
@@ -606,6 +646,7 @@ function onSensors(d) {
     const t = tileEls[s.key];
     const v = d[s.key];
     t.root.classList.remove("stale");
+    $("tank").classList.remove("stale");
     if (v == null || Number.isNaN(v)) {
       t.value.firstChild.nodeValue = "—";
       t.mark.hidden = true;
@@ -645,7 +686,25 @@ function onSensors(d) {
   else if (d.level_pct == null) { tank.textContent = "Tank —"; tank.className = "foot"; }
   else { tank.textContent = "Tank OK"; tank.className = "foot"; }
 
+  updateTank(d);
   sessionText = d.log_id != null ? `log #${String(d.log_id).padStart(4, "0")} · row ${d.row}` : "";
+}
+
+// ---------- water tank ----------
+// TANK_H matches the tank drawing: the water group sits at the top and is moved down by the empty part.
+const TANK_H = 160, LOW_LEVEL_PCT = 20;          // LOW_LEVEL_PCT as in firmware/Full_code/Full_code.ino
+function updateTank(d) {
+  const pct = d.level_pct == null || Number.isNaN(Number(d.level_pct)) ? null : Math.max(0, Math.min(100, Number(d.level_pct)));
+  $("tank-level").style.transform = `translateY(${TANK_H * (1 - (pct || 0) / 100)}px)`;
+  $("tank").classList.toggle("empty", pct == null);
+  $("tank-pct").innerHTML = (pct == null ? "—" : Math.round(pct)) + "<small>%</small>";
+  const b = $("tank-badge");
+  if (pct == null) { b.className = "badge"; b.textContent = "No reading"; }
+  else if (d.level_low || pct < LOW_LEVEL_PCT) { b.className = "badge bad"; b.textContent = "Low"; }
+  else { b.className = "badge good"; b.textContent = "OK"; }
+  $("tank-cm").textContent = d.level == null ? "—" : Number(d.level).toFixed(1) + " cm";
+  $("tank-dist").textContent = d.dist_cm == null ? "—" : Number(d.dist_cm).toFixed(1) + " cm";
+  $("tank").title = d.level_low ? "Tank low: all pumps stopped" : `Pumps stop below ${LOW_LEVEL_PCT} %`;
 }
 
 // ---------- camera ----------
@@ -791,8 +850,6 @@ const G_SERIES = [
   { key: "temp", label: "Air temp", unit: "°C",    band: [25, 36],   scale: [20, 40],   limit: [0, 50], dec: 1 },
   { key: "hum",  label: "Humidity", unit: "%",     band: [50, 75],   scale: [40, 85],   limit: [0, 100], dec: 1 },
 ];
-// the overview graph can also show water level
-const MINI_SERIES = [...G_SERIES, { key: "level_pct", label: "Water", unit: "%", band: [20, 100], scale: [0, 100], limit: [0, 100], dec: 0 }];
 const RANGE_NOTE = { "1h": "Last hour · every 2 s", "24h": "Last 24 h · 1-min averages", "7d": "Last 7 days · 10-min averages" };
 const REFRESH_MS = { "1h": 10000, "24h": 60000, "7d": 120000 };
 let gRange = "24h", gTable = false, gHist = null, gAct = null, gVis = null, gTimer = null;
@@ -817,14 +874,14 @@ function hatch(ctx) {
   x.beginPath(); x.moveTo(0, 8); x.lineTo(8, 0); x.stroke();
   return ctx.createPattern(c, "repeat");
 }
-// Shared look: smooth line in the sensor's colour, a fade under it, light vertical grid only.
-// The Sensor History charts add white dot markers (about 12 per chart) and a dark tag on the peak.
-function chartOpts(s, mini) {
+// Sensor History chart look: smooth line in the sensor's colour, a fade under it, light vertical
+// grid only, white dot markers (about 12 per chart) and a dark tag on the peak.
+function chartOpts(s) {
   const color = colorOf(s.key), font = "11px " + css("--sans");
   return {
     width: 400, height: 200, legend: { show: false },
-    padding: mini ? [6, 4, 0, 4] : [30, 10, 0, 10],
-    cursor: mini ? { show: false } : { sync: { key: "hydro" }, drag: { x: false, y: false }, points: { size: 7, fill: color }, y: false },
+    padding: [30, 10, 0, 10],
+    cursor: { sync: { key: "hydro" }, drag: { x: false, y: false }, points: { size: 7, fill: color }, y: false },
     scales: {
       x: { time: true },
       y: { range: (u, mn, mx) => {
@@ -836,20 +893,20 @@ function chartOpts(s, mini) {
     },
     axes: [
       { stroke: css("--muted"), font, grid: { stroke: css("--line"), width: 1 }, ticks: { show: false }, gap: 4, size: 24,
-        values: (u, ts) => ts.map((t) => fmtTime(t, mini ? "24h" : gRange)), space: mini ? 56 : 80 },
+        values: (u, ts) => ts.map((t) => fmtTime(t)), space: 80 },
       { show: false },
     ],
     series: [{}, {
-      stroke: color, width: mini ? 2 : 2.5, spanGaps: false,
-      points: mini ? { show: false } : { show: true, size: 9, width: 2, fill: "#fff", stroke: color, filter: markerIdx },
+      stroke: color, width: 2.5, spanGaps: false,
+      points: { show: true, size: 9, width: 2, fill: "#fff", stroke: color, filter: markerIdx },
       paths: uPlot.paths.spline(),
       fill: (u) => {
         const g = u.ctx.createLinearGradient(0, u.bbox.top, 0, u.bbox.top + u.bbox.height);
-        g.addColorStop(0, rgba(color, mini ? 0.26 : 0.5)); g.addColorStop(1, rgba(color, 0.02));
+        g.addColorStop(0, rgba(color, 0.5)); g.addColorStop(1, rgba(color, 0.02));
         return g;
       },
     }],
-    hooks: mini ? {} : {
+    hooks: {
       drawClear: [(u) => drawBackdrop(u, s)],
       draw: [(u) => drawPeak(u, s)],
       setCursor: [(u) => onCursor(u)],
@@ -899,7 +956,7 @@ function buildCharts() {
       <div class="plot"></div>`;
     box.appendChild(c);
     const plot = c.querySelector(".plot");
-    const u = new uPlot(chartOpts(s, false), [[], []], plot);
+    const u = new uPlot(chartOpts(s), [[], []], plot);
     charts[s.key] = { u, plot, rdT: c.querySelector(".rd small"), rdV: c.querySelector(".rd b"), s };
     fitPlot(u, plot);
   }
@@ -951,30 +1008,6 @@ function drawBackdrop(u, s) {
   ctx.restore();
 }
 
-// ---------- overview graph: last 24 h of the sensor picked on the tiles ----------
-let miniKey = "ec", mini = null, miniHist = null, miniTimer = null;
-try { const k = localStorage.getItem("hydro.mini"); if (MINI_SERIES.some((s) => s.key === k)) miniKey = k; } catch (e) {}
-function setMini(key) {
-  miniKey = key;
-  try { localStorage.setItem("hydro.mini", key); } catch (e) {}
-  for (const k in tileEls) tileEls[k].root.setAttribute("aria-pressed", String(k === key));
-  const s = MINI_SERIES.find((x) => x.key === key), plot = $("mini-plot");
-  $("mini").setAttribute("aria-label", s.label + ", last 24 hours");
-  if (mini) mini.destroy();
-  mini = new uPlot(chartOpts(s, true), miniHist ? [miniHist.t, miniHist[key]] : [[], []], plot);
-  if (plot.clientWidth) mini.setSize({ width: plot.clientWidth, height: plot.clientHeight });
-}
-new ResizeObserver(() => { const p = $("mini-plot"); if (mini && p.clientWidth) mini.setSize({ width: p.clientWidth, height: p.clientHeight }); }).observe($("mini-plot"));
-async function loadMini() {
-  clearTimeout(miniTimer);
-  try {
-    const r = await fetch("api/history?range=24h", { cache: "no-store" });
-    if (r.ok) { miniHist = await r.json(); if (mini) mini.setData([miniHist.t, miniHist[miniKey]]); }
-  } catch (e) { console.warn("mini history", e); }
-  if (currentTab === "overview") miniTimer = setTimeout(loadMini, 60000);
-}
-$("mini").addEventListener("click", () => showTab("graphs"));
-
 // ---------- live feed into the charts ----------
 // The charts load history from server.py, then every MQTT reading is added straight into the
 // same time grid, so they keep up with the tiles instead of waiting for the next reload.
@@ -1024,13 +1057,12 @@ function livePumps(ts, d) {
 let liveFrame = 0;
 function onLiveReading(d) {
   const ts = d.ts || Date.now() / 1000;
-  const m = liveAppend(miniHist, d, ts), g = liveAppend(gHist, d, ts);
-  if (g) livePumps(ts, d);
-  if ((!m && !g) || liveFrame) return;
+  if (!liveAppend(gHist, d, ts)) return;
+  livePumps(ts, d);
+  if (liveFrame) return;
   liveFrame = requestAnimationFrame(() => {        // one redraw per frame at most
     liveFrame = 0;
-    if (m && mini) mini.setData([miniHist.t, miniHist[miniKey]]);
-    if (g && currentTab === "graphs" && !(gTable && gPage > 0)) renderGraphs();   // don't move rows under the reader
+    if (currentTab === "graphs" && !(gTable && gPage > 0)) renderGraphs();   // don't move rows under the reader
   });
 }
 function lastIdx(arr) { let i = arr.length - 1; while (i >= 0 && arr[i] == null) i--; return i; }
@@ -1480,6 +1512,7 @@ setInterval(() => {
   else if (now - lastSensorAt > STALE_MS) {
     setDot("esp", "bad", "ESP32: no data for " + fmtAgo(now - lastSensorAt) + sess);
     for (const s of SENSORS) tileEls[s.key].root.classList.add("stale");
+    $("tank").classList.add("stale");
     for (const p of PUMPS) { const e = pumpEls[p.key]; e.pill.className = "pill unknown"; e.pill.textContent = "—"; e.row.title = e.role + "\nNo status from ESP32"; }
   } else {
     setDot("esp", "ok", "ESP32 live · " + fmtAgo(now - lastSensorAt) + " ago" + sess);
@@ -1506,7 +1539,6 @@ setInterval(() => {
 }, 1000);
 
 // ---------- boot ----------
-setMini(miniKey);
 const first = (location.hash || "").slice(1);
 showTab(["graphs", "calibration"].includes(first) ? first : "overview");
 requestAnimationFrame(() => placeInd($("tabs")));

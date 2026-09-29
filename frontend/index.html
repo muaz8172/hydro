@@ -1262,13 +1262,19 @@ const WIZ = {
     title: "EC probe", field: "ec_mv", unit: "mV", minWait: 20, drift: true, tol: (m) => Math.max(Math.abs(m) * 0.02, 5),
     exit: "exitec",
     steps: [
-      { name: "Start", h: "Enter EC calibration mode", how: ["Take the EC probe out of the tank.", "Rinse it with distilled water and dab it dry."],
+      // DFRobot_EC's exitec saves only the K of the buffer the probe is in at that moment, so each
+      // buffer gets its own enterec -> calec -> exitec, with the probe still in that buffer.
+      { name: "Start", send: true, h: "Enter EC calibration mode", how: ["Take the EC probe out of the tank.", "Rinse it with distilled water and dab it dry."],
         cmd: "enterec", ok: /Enter EC Calibration Mode/i, err: /Command Error/i },
       { name: "1413 µS/cm", h: "Low buffer: 1413 µS/cm", how: ["Put the probe in the 1413 µS/cm buffer.", "Stir gently once, then keep it still."],
         cmd: "calec", expect: 230, accept: [148, 311], ok: /Successful,K/i, err: /Buffer Solution Error|Failed|Command Error/i },
-      { name: "12.88 mS/cm", h: "High buffer: 12.88 mS/cm", how: ["Rinse the probe and dab it dry.", "Put it in the 12.88 mS/cm buffer and keep it still."],
+      { name: "Save 1413", send: true, accept: [148, 311], h: "Save the low buffer", how: ["Keep the probe in the 1413 µS/cm buffer.", "The ESP32 saves the K value of the buffer the probe is in."],
+        cmd: "exitec", ok: /Calibration Successful/i, err: /Calibration Failed/i },
+      { name: "Restart", send: true, h: "Enter calibration mode again", how: ["Rinse the probe with distilled water and dab it dry."],
+        cmd: "enterec", ok: /Enter EC Calibration Mode/i, err: /Command Error/i },
+      { name: "12.88 mS/cm", h: "High buffer: 12.88 mS/cm", how: ["Put the probe in the 12.88 mS/cm buffer.", "Stir gently once, then keep it still."],
         cmd: "calec", expect: 2100, accept: [1476, 2755], ok: /Successful,K/i, err: /Buffer Solution Error|Failed|Command Error/i },
-      { name: "Save", h: "Save and exit", how: ["Saves both K values in the ESP32's memory.", "Afterwards, rinse the probe and put it back in the tank."],
+      { name: "Save 12.88", send: true, accept: [1476, 2755], h: "Save the high buffer", how: ["Keep the probe in the 12.88 mS/cm buffer.", "Afterwards, rinse the probe and put it back in the tank."],
         cmd: "exitec", ok: /Calibration Successful/i, err: /Calibration Failed/i },
       { name: "Done", h: "EC calibrated", how: ["The new K values are shown under Stored calibration.", "Put the probe back in the tank."], done: true },
     ],
@@ -1309,13 +1315,19 @@ const cal = (() => {
 
   function stability() {
     const w = W(), s = S();
-    if (s.done || s.name === "Start" || s.name === "Save") return { ok: true, skip: true };
+    if (s.done || (s.send && !s.accept)) return { ok: true, skip: true };
     const fresh = now() - lastAt < STALE_MS;
     const win = samples.filter((x) => now() - x.t <= 10000).map((x) => x.v);
     const prev = samples.filter((x) => now() - x.t > 10000 && now() - x.t <= 20000).map((x) => x.v);
     const waitLeft = Math.max(0, w.minWait - (now() - stepAt) / 1000);
     const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
     if (!fresh) return { ok: false, text: "No readings from the ESP32" };
+    if (s.send) {                                  // save step: just check the probe is still in this buffer
+      if (win.length < 2) return { ok: false, text: "Collecting readings…", prog: 0.2 };
+      const m = avg(win), inside = m >= s.accept[0] && m <= s.accept[1];
+      return inside ? { ok: true, text: `Probe in the buffer: ${Math.round(m)} mV` }
+                    : { ok: false, text: `Put the probe back in the buffer: reading ${Math.round(m)} mV, needs ${s.accept[0]}–${s.accept[1]} mV`, prog: 0 };
+    }
     if (win.length < 4 || (w.drift && prev.length < 4)) return { ok: false, text: "Collecting readings…", prog: win.length / 4 * 0.3 };
     const mean = avg(win), tol = w.tol(mean);
     const vary = w.drift ? Math.abs(mean - avg(prev)) : Math.max(...win) - Math.min(...win), steady = vary <= tol;
@@ -1332,7 +1344,7 @@ const cal = (() => {
   function render() {
     const box = $("wiz"); if (!box) return;
     const w = W(), s = S(), exp = expectOf(s), live = client.connected;
-    const needsReading = !s.done && s.name !== "Start" && s.name !== "Save";
+    const needsReading = !s.done && (!s.send || !!s.accept);
     box.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
         <h2 style="font-size:17px">${w.title} calibration</h2>
@@ -1372,7 +1384,7 @@ const cal = (() => {
       b.onclick = () => reset(); a.appendChild(b); return;
     }
     const b = el("button", "primary"); b.type = "button"; b.id = "cal-send";
-    b.innerHTML = pending ? "Waiting for the ESP32…" : (s.name === "Start" || s.name === "Save" ? "Send " : "Capture · send ") + `<span class="num">${s.cmd}</span>`;
+    b.innerHTML = pending ? "Waiting for the ESP32…" : (s.send ? "Send " : "Capture · send ") + `<span class="num">${s.cmd}</span>`;
     b.disabled = !canSend();
     b.onclick = () => capture();
     a.appendChild(b);

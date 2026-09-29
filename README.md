@@ -41,9 +41,7 @@ hydro/
 ├── Circuit Diagram/           # Wiring diagram (EasyEDA project)
 └── firmware/                  # ESP32 sketches (Arduino IDE)
     ├── Full_code/             #   MAIN firmware: DHT22 + EC + pH + HC-SR04 + pumps -> JSON
-    │   ├── Full_code.ino
-    │   ├── DFRobot_EC.cpp     #   PATCHED EC library (ESP32 fixes)
-    │   └── DFRobot_EC.h
+    │   └── Full_code.ino      #   EC maths + calibration built in (no DFRobot_EC)
     ├── Relay_Test/            #   2-channel relay test (Pump A / Pump B)
     ├── DHT22/                 #   single-sensor test sketches
     ├── EC_Sensor/
@@ -95,10 +93,7 @@ GND ---------+
 - **DHT sensor library** (Adafruit)
 - **Adafruit Unified Sensor**
 
-The EC library is **not** installed from the Library Manager. Use the patched `DFRobot_EC.cpp` / `.h` inside `firmware/Full_code/`. It fixes:
-- a `strupr()` bug that could corrupt memory
-- calibration not surviving a reboot (missing `EEPROM.commit()` on ESP32)
-- `exitec` saving only one calibration point
+No EC library is needed: `Full_code.ino` does the EC conversion and calibration itself (same maths as DFRobot_EC). The DFRobot_EC library's `calibration()` corrupted the ESP32 flash lock, so every EC save crashed the ESP32 and nothing was stored. The built-in version saves both K values and prints `# EC K values written to flash`; `status` shows what was read from flash at boot. If an old `DFRobot_EC.cpp` / `.h` is still in your local `Full_code` folder, delete it.
 
 ### Upload
 1. Open `firmware/Full_code/Full_code.ino` in the Arduino IDE.
@@ -315,10 +310,13 @@ mosquitto_pub -t hydro/cmd -m "status"
 |---|---|---|
 | 1 | Start calibration | `enterec` |
 | 2 | Probe in **1413 µS/cm** buffer, wait 20 s | `calec` |
-| 3 | Rinse, probe in **12.88 mS/cm** buffer, wait 20 s | `calec` |
-| 4 | Save both points | `exitec` |
+| 3 | Save (probe still in the buffer) | `exitec` |
+| 4 | Start again, rinse, probe in **12.88 mS/cm** buffer, wait 20 s | `enterec`, `calec` |
+| 5 | Save | `exitec` |
 
-Expected: ~230 mV in the 1413 buffer, ~2100 mV in the 12.88 buffer. K-values must be between 0.5 and 1.5.
+Each `exitec` saves every K captured since `enterec` and should print `# EC K values written to flash`. The dashboard's Calibration tab runs these steps for you.
+
+Expected: ~230 mV in the 1413 buffer (accepted 148–311 mV), ~2100 mV in the 12.88 buffer (accepted 1476–2755 mV). K-values must be between 0.5 and 1.5.
 
 ### pH calibration (buffers: pH 7 and pH 4)
 **Zero the module first (one time):** unplug the probe, short the BNC centre pin to its outer shell, and turn the **left potentiometer** (next to the BNC) until `po_mv` ≈ **2500**. It is a multi-turn trimmer (~20–25 turns).

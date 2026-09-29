@@ -357,7 +357,7 @@ def hardware():
                 ["DHT22 (air temp / humidity)", "DATA / VCC / GND", "GPIO15 / 3.3 V / GND",
                  "10 k pull-up if the module has none"],
                 ["EC sensor (EC V2.1)", "A0 / VCC / GND", "GPIO34 / 3.3 V / GND",
-                 "T1 unconnected; patched DFRobot_EC library"],
+                 "T1 unconnected; EC maths built into the firmware"],
                 ["pH sensor (PH-4502C)", "Po / V+ / G", "GPIO35 via divider / 5 V / GND",
                  "10 k / 20 k divider is required"],
                 ["HC-SR04 (water level)", "TRIG / ECHO / VCC / GND",
@@ -635,6 +635,11 @@ def done():
                             "pump and water-level bars, paged table"],
                 ["b79f89d", "Live MQTT readings fed straight into the charts (no reload lag)"],
                 ["ee15e07", "Animated water tank on Live Monitoring; Water tile removed"],
+                ["989ff9d", "EC read on the 11 dB ADC range (millivolts were 3x too high)"],
+                ["6b7d698", "Calibration tab saves each EC buffer separately"],
+                ["b89f97e", "EC conversion and calibration built into the firmware; DFRobot_EC "
+                            "removed (its calibration() crashed every EC save)"],
+                ["d63ccb6", "Crash probes removed; EC calibration verified to survive a replug"],
                 ["(this version)", "System guide version 4 (updated)"]], [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],
@@ -660,9 +665,8 @@ def done():
 def run():
     s = [H1("5. How to run the system"), H2("5.1 First-time setup"),
          P(f"Upload {c('firmware/Full_code/Full_code.ino')} to the ESP32 with the Arduino IDE "
-           "(board: ESP32 Dev Module; libraries: DHT sensor library and Adafruit Unified Sensor; the "
-           "patched DFRobot_EC files are in the same folder). Re-upload it after the relay change so "
-           "the ESP32 runs the version with the shared relay setting. Then on the Pi:"),
+           "(board: ESP32 Dev Module; libraries: DHT sensor library and Adafruit Unified Sensor; no EC "
+           "library is needed, the EC maths and calibration are built into the sketch). Then on the Pi:"),
          code("sudo apt install mosquitto mosquitto-clients python3-serial python3-paho-mqtt python3-pil\n"
               "cd ~/hydro\n"
               "sudo cp backend/mosquitto/local.conf /etc/mosquitto/conf.d/\n"
@@ -731,9 +735,10 @@ def calibration():
            f"{c('mosquitto_pub -t hydro/cmd -m &lt;command&gt;')}. All values are stored in the ESP32 "
            f"and survive reboots. Check them with {c('status')}.")]
     s += table([["Sensor", "Steps", "Expected"],
-                ["EC", f"{c('enterec')} → probe in 1413 µS/cm buffer → {c('calec')} → probe in "
-                       f"12.88 mS/cm buffer → {c('calec')} → {c('exitec')}",
-                 "~230 mV in 1413, ~2100 mV in 12.88; K between 0.5 and 1.5"],
+                ["EC", f"{c('enterec')} → probe in 1413 µS/cm buffer → {c('calec')} → {c('exitec')}, then "
+                       f"{c('enterec')} → 12.88 mS/cm buffer → {c('calec')} → {c('exitec')}. Each save "
+                       f"prints \"EC K values written to flash\"",
+                 "~230 mV in 1413 (148–311 accepted), ~2100 mV in 12.88 (1476–2755); K 0.5–1.5"],
                 ["pH", f"Probe in pH 7 buffer, wait 1–2 min → {c('ph7')} → rinse → pH 4 buffer, "
                        f"wait → {c('ph4')} ({c('phreset')} = defaults)", "Slope about 180 mV/pH"],
                 ["Tank level", f"Tank empty → {c('tankempty')} → fill to MAX → {c('tankfull')} "

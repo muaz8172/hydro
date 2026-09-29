@@ -217,7 +217,8 @@ void DFRobot_EC::ecCalibration(byte mode)
                     // copy in RAM, so without commit() the calibration was lost at the next reset.
                     EEPROM_write(KVALUEADDR, this->_kvalueLow);
                     EEPROM_write(KVALUEADDR+4, this->_kvalueHigh);
-                    EEPROM.commit();
+                    bool saved = EEPROM.commit();
+                    Serial.println(saved ? F("# EC K values written to flash") : F("# EC K values NOT written to flash (EEPROM.commit failed)"));
                     Serial.print(F(">>>Calibration Successful"));
                 }else{
                     Serial.print(F(">>>Calibration Failed"));

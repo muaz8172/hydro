@@ -97,6 +97,7 @@ bool  pumpBOn   = false;
 bool  sampleOn  = false;        // sampling pump relay state
 bool  sampleEnabled = true;     // sampling pump runs all the time unless sampleoff
 bool  tankStop  = false;        // true = tank low, pumps locked OFF
+uint8_t ecBootBytes[8];         // EC K bytes as read from flash at boot (FF = never saved), shown by status
 
 char    cmdBuf[32];
 uint8_t cmdLen = 0;
@@ -271,6 +272,12 @@ void printStatus()
   EEPROM.get(EC_KADDR + 4, kHigh);
   Serial.printf("# EC   Klow=%.3f  Khigh=%.3f%s\n", kLow, kHigh,
                 (kLow == 1.0 && kHigh == 1.0) ? "  (NOT calibrated)" : "");
+  float bootLow, bootHigh;
+  memcpy(&bootLow, ecBootBytes, 4);
+  memcpy(&bootHigh, ecBootBytes + 4, 4);
+  bool never = ecBootBytes[0] == 0xFF && ecBootBytes[1] == 0xFF && ecBootBytes[2] == 0xFF && ecBootBytes[3] == 0xFF;
+  if (never) Serial.println("# EC   flash at boot: empty (never saved)");
+  else       Serial.printf("# EC   flash at boot: Klow=%.3f  Khigh=%.3f\n", bootLow, bootHigh);
   Serial.printf("# pH   V7=%.0fmV  V4=%.0fmV  slope=%.1fmV/pH\n",
                 phV7, phV4, (phV4 - phV7) / 3.0);
   Serial.printf("# Tank empty=%.1fcm  full=%.1fcm%s\n",
@@ -425,6 +432,7 @@ void setup()
   pinMode(ECHO_PIN, INPUT);
   digitalWrite(TRIG_PIN, LOW);
   dht.begin();
+  for (int i = 0; i < 8; i++) ecBootBytes[i] = EEPROM.read(EC_KADDR + i);   // before ec.begin() fills defaults
   ec.begin();
   loadPhCal();
   loadTankCal();

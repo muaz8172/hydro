@@ -762,7 +762,7 @@ function hatch(ctx) {
   const c = document.createElement("canvas"); c.width = c.height = 8;
   const x = c.getContext("2d");
   x.fillStyle = css("--sunk"); x.fillRect(0, 0, 8, 8);
-  x.strokeStyle = "#dcdad4"; x.lineWidth = 1.2;
+  x.strokeStyle = "#e6e4de"; x.lineWidth = 1;
   x.beginPath(); x.moveTo(0, 8); x.lineTo(8, 0); x.stroke();
   return ctx.createPattern(c, "repeat");
 }
@@ -828,27 +828,40 @@ function drawBackdrop(u, s) {
   const y1 = u.valToPos(s.band[1], "y", true), y0 = u.valToPos(s.band[0], "y", true);
   ctx.fillStyle = rgba(colorOf(s.key), 0.07);
   ctx.fillRect(left, Math.max(top, y1), width, Math.min(top + height, y0) - Math.max(top, y1));
-  // gaps: runs of empty buckets, hatched and labelled
-  const xs = u.data[0], ys = u.data[1];
+  // gaps. Only gaps BETWEEN readings are hatched; empty time before the first reading or
+  // after the last one stays blank with a small note, so a sensor that just came back
+  // doesn't look like a wall of hatching.
+  const xs = u.data[0], ys = u.data[1], px = devicePixelRatio;
+  ctx.font = `${11 * px}px ${css("--sans")}`;
+  const note = (text, x, y, align) => {
+    ctx.textAlign = align; ctx.fillStyle = css("--muted"); ctx.fillText(text, x, y); ctx.textAlign = "left";
+  };
   if (xs && xs.length) {
-    const minRun = gRange === "1h" ? 5 : 3, pat = hatch(ctx);
-    ctx.font = `${11 * devicePixelRatio}px ${css("--sans")}`;
-    let i0 = -1;
-    for (let i = 0; i <= xs.length; i++) {
-      const empty = i < xs.length && ys[i] == null;
-      if (empty && i0 < 0) i0 = i;
-      if (!empty && i0 >= 0) {
-        if (i - i0 >= minRun) {
-          const xa = u.valToPos(xs[i0], "x", true), xb = u.valToPos(xs[i - 1], "x", true);
-          ctx.fillStyle = pat; ctx.fillRect(xa, top, Math.max(2, xb - xa), height);
-          const label = "no data " + fmtTime(xs[i0]) + "–" + (i === xs.length ? "now" : fmtTime(xs[i - 1]));
-          const tw = ctx.measureText(label).width, px = devicePixelRatio;
-          if (xb - xa > tw + 16 * px) {
-            ctx.fillStyle = css("--card"); ctx.fillRect(xa + 4 * px, top + 4 * px, tw + 8 * px, 16 * px);
-            ctx.fillStyle = css("--muted"); ctx.fillText(label, xa + 8 * px, top + 16 * px);
+    let first = -1, last = -1;
+    for (let i = 0; i < ys.length; i++) if (ys[i] != null) { if (first < 0) first = i; last = i; }
+    if (first < 0) {
+      note("No readings in this range", left + width / 2, top + height / 2, "center");
+    } else {
+      const minRun = gRange === "1h" ? 5 : 3, pat = hatch(ctx);
+      if (first > minRun) note("no data before " + fmtTime(xs[first]), u.valToPos(xs[first], "x", true) - 8 * px, top + 16 * px, "right");
+      if (xs.length - 1 - last > minRun) note("no data since " + fmtTime(xs[last]), u.valToPos(xs[last], "x", true) + 8 * px, top + 16 * px, "left");
+      let i0 = -1;
+      for (let i = first; i <= last + 1; i++) {
+        const empty = i <= last && ys[i] == null;
+        if (empty && i0 < 0) i0 = i;
+        if (!empty && i0 >= 0) {
+          if (i - i0 >= minRun) {
+            const xa = u.valToPos(xs[i0], "x", true), xb = u.valToPos(xs[i - 1], "x", true);
+            ctx.fillStyle = pat; ctx.fillRect(xa, top, Math.max(2, xb - xa), height);
+            const label = "no data " + fmtTime(xs[i0]) + "–" + fmtTime(xs[i - 1]);
+            const tw = ctx.measureText(label).width;
+            if (xb - xa > tw + 16 * px) {
+              ctx.fillStyle = css("--card"); ctx.fillRect(xa + 4 * px, top + 4 * px, tw + 8 * px, 16 * px);
+              ctx.fillStyle = css("--muted"); ctx.fillText(label, xa + 8 * px, top + 16 * px);
+            }
           }
+          i0 = -1;
         }
-        i0 = -1;
       }
     }
   }

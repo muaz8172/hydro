@@ -81,11 +81,29 @@ def on_message(client, userdata, msg):
         print(f"[cmd] -> ESP32: {cmd}", flush=True)
 
 
+def start_esp32(s):
+    """Reset the ESP32 into its program through the board's auto-reset circuit (RTS drives EN,
+    DTR drives IO0), like pressing EN. Without this it sometimes sat silent after being plugged
+    in until EN was pressed. Then end any half-line of reset noise in its command buffer, which
+    used to garble the first command ("unknown command: UUTT...CALEC")."""
+    s.dtr = False                      # IO0 high: normal boot, never download mode
+    s.rts = True                       # EN low: reset
+    time.sleep(0.1)
+    s.rts = False                      # EN high: run
+    time.sleep(2)                      # boot + setup()
+    s.write(b"\n")
+    print("[serial] ESP32 reset and started", flush=True)
+
+
 def open_serial():
     while True:
         try:
-            s = serial.Serial(PORT, BAUD, timeout=5, exclusive=True)
+            s = serial.Serial(timeout=5, exclusive=True)
+            s.port, s.baudrate = PORT, BAUD
+            s.dtr = s.rts = False              # applied on open, so opening doesn't hold it in reset
+            s.open()
             print(f"[serial] opened {PORT}", flush=True)
+            start_esp32(s)
             return s
         except serial.SerialException as e:
             print(f"[serial] waiting for {PORT}: {e}", flush=True)

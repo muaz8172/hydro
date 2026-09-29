@@ -230,8 +230,9 @@ sudo reboot
 ```
 `backend/udev/99-esp32.rules` contains:
 ```
-SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="esp32"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="esp32", ENV{ID_MM_DEVICE_IGNORE}="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hydro-bridge.service"
 ```
+It names the port `/dev/esp32`, keeps ModemManager off it, and starts `hydro-bridge` whenever the ESP32 is plugged in (even if the bridge was stopped). When the bridge opens the port it resets the ESP32 through the board's auto-reset circuit, so it always starts running without pressing EN.
 
 ### 3. Mosquitto (local only)
 ```bash

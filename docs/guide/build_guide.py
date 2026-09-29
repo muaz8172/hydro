@@ -583,6 +583,7 @@ def done():
             ["ESP32 firmware", "Always-on sampling pump (GPIO27) and tank-low stop for all pumps",
              "Done"],
             ["ESP32 firmware", f"Air temperature target 25–36 °C, reported as {c('temp_ok')}", "Done"],
+            ["ESP32 firmware", "Start delay after boot: sampling pump 30 s, Pump A/B auto 60 s", "Done"],
             ["Hardware", "1-channel relay replaced by a second 2-channel relay (sampling pump on "
                          f"relay 2 IN1; IN2 spare); one shared {c('RELAY_ACTIVE_LOW')}", "Done"],
             ["Testing", "Relay test sketch: relay 1 switched Pump A and Pump B correctly", "Done"],
@@ -590,6 +591,8 @@ def done():
              "To do"],
             ["Raspberry Pi", "Serial → MQTT bridge with auto-reconnect and fixed /dev/esp32 name",
              "Done"],
+            ["Raspberry Pi", "Bridge runs only while the ESP32 is plugged in, and resets the ESP32 "
+                             "when it opens the port", "Done"],
             ["Raspberry Pi", "Mosquitto broker (local TCP + websocket for the dashboard)", "Done"],
             ["Data logging", "CSV log per ESP32 connection, including pump columns", "Done"],
             ["Camera", "MaixCAM app: auto-start, preview, photo server over USB", "Done"],
@@ -646,21 +649,25 @@ def done():
                 ["b89f97e", "EC conversion and calibration built into the firmware; DFRobot_EC "
                             "removed (its calibration() crashed every EC save)"],
                 ["d63ccb6", "Crash probes removed; EC calibration verified to survive a replug"],
+                ["27a3ecb", "Docs: EC calibration is built into the firmware"],
+                ["f8898e1 · 4b692ae", "Bridge starts when the ESP32 is plugged in and stops when it "
+                                      "is unplugged; it resets the ESP32 on connect"],
+                ["aa305f1", "Pump start delay after ESP32 boot (sampling 30 s, Pump A/B 60 s)"],
                 ["(this version)", "System guide version 4 (updated)"]], [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],
-              ["ESP32 + bridge", "Running · sending data with pump columns (log #0007, 23 Sep)"],
-              ["Relays", f"Updated · two 2-channel modules; firmware updated. Re-flash "
-                         f"{c('Full_code.ino')} and confirm the sampling pump runs on relay 2 IN1"],
+              ["ESP32 + bridge", "Running · started by itself after a Pi reboot (log #0043, 29 Sep)"],
+              ["Firmware", f"Updated · pump start delay added (29 Sep). Re-flash "
+                           f"{c('Full_code.ino')} and confirm the sampling pump runs on relay 2 IN1"],
               ["Mosquitto", "Running"],
               ["MaixCAM", "Running · photos reach the Pi; aim the camera at the plants"],
               ["Stage model", f"Updated {DATE} · retrained on {M['photos']} photos; restart "
                               f"{c('hydro-vision')} to load it"],
-              ["vision.py / dashboard", "Check · install the services (section 5.2) so they survive "
-                                        f"a reboot; vision.py needs {c('.venv')} for the stage model"],
-              ["pH probe", "Check · read 19.71 on 23 Sep, which means disconnected or not calibrated"],
-              ["Water level", "Check · no echo from the HC-SR04 on 23 Sep (level empty in the log)"],
-              ["EC", f"Check · {c('ec_low')} on 23 Sep (probe in plain water or dry)"]]
+              ["vision.py / dashboard", "Running · services enabled, start at every boot"],
+              ["pH probe", "Check · still reads 19.71 on 29 Sep: disconnected or not in solution"],
+              ["Water level", "Check · still no echo from the HC-SR04 on 29 Sep (level empty)"],
+              ["EC", f"Check · 0.0 with {c('ec_low')} on 29 Sep (probe dry or not connected); "
+                     "Pumps A/B dose nonstop while it reads this"]]
     s += table(status, [0.26, 0.74],
                shade={i: ("blue" if r[1].startswith("Updated") else "amber")
                       for i, r in enumerate(status)
@@ -689,12 +696,17 @@ def run():
          code("scp -r ~/hydro/maixcam/hydro_cam root@10.122.173.1:/maixapp/apps/\n"
               "ssh root@10.122.173.1 'echo hydro_cam > /maixapp/auto_start.txt && reboot'\n"
               "ssh root@10.122.173.1 passwd          # change the factory password"),
-         H2("5.2 Install the three services (start at every boot)"),
+         H2("5.2 Install the three services"),
          code("cd ~/hydro\n"
               "sudo cp backend/systemd/hydro-bridge.service backend/systemd/hydro-vision.service \\\n"
               "        backend/systemd/hydro-dashboard.service /etc/systemd/system/\n"
               "sudo systemctl daemon-reload\n"
+              "sudo systemctl disable hydro-bridge     # drop the old start-at-boot link, if any\n"
               "sudo systemctl enable --now hydro-bridge hydro-vision hydro-dashboard"),
+         P("hydro-vision and hydro-dashboard start at every boot. hydro-bridge is tied to the ESP32 "
+           "(dev-esp32.device from the udev rule): plugging the ESP32 in, or booting with it attached, "
+           "starts the bridge, and unplugging it stops the bridge. When the bridge opens the port it "
+           "resets the ESP32, so every connect starts a new CSV log and a new pump start delay.", small),
          P(f"If vision.py or the dashboard are still running from a manual start, stop them first: "
            f"{c('pkill -f vision.py; pkill -f server.py')}", small),
          H2("5.3 Daily use")]
@@ -704,9 +716,9 @@ def run():
         f"Open the dashboard: {c('http://localhost:8000')} on the Pi, or "
         f"{c('http://&lt;pi-ip&gt;:8000')} from a phone on the same WiFi (find the IP with "
         f"{c('hostname -I')}).",
-        "Check the three dots at the top right: MQTT, ESP32 and Camera should be green.",
-        f"Check the pump cards: Sampling should show ON (relay 2) unless the tank is low or "
-        f"{c('sampleoff')} was sent.",
+        "Check the header at the top right: Live, ESP32 and Camera should be green.",
+        f"Check the pump cards: Sampling should show ON (relay 2) from 30 s after start-up, unless "
+        f"the tank is low or {c('sampleoff')} was sent. Pumps A/B follow EC/pH from 60 s after start-up.",
         "Aim the camera at the lettuce using the preview on the MaixCAM screen. Take photos under "
         "the grow light."])
     s += [PageBreak(), H2("5.4 Useful commands")]
@@ -775,12 +787,13 @@ def calibration():
                                                     "the port)"],
                 ["Sampling pump does not run", f"Check {c('pump_sample')} in the JSON. If it is true "
                  "but the pump is off: relay 2 IN1 on GPIO27, relay 2 VCC on 5 V, GND shared with the "
-                 "ESP32, pump on the CH1 contacts (not CH2). If it is false: tank low, or "
-                 f"{c('sampleoff')} was sent (send {c('sampleon')})"],
+                 "ESP32, pump on the CH1 contacts (not CH2). If it is false: less than 30 s since the "
+                 f"ESP32 started (start delay), tank low, or {c('sampleoff')} was sent (send {c('sampleon')})"],
                 ["A relay is ON when it should be OFF", f"The module is active HIGH: set "
                  f"{c('RELAY_ACTIVE_LOW')} to {c('false')} and re-upload (it applies to both relays)"],
                 ["Pumps A/B never switch", f"Relay 1 IN1/IN2 on GPIO25/26; test with "
-                                           f"{c('firmware/Relay_Test/')}; check the tank is not low"],
+                                           f"{c('firmware/Relay_Test/')}; check the tank is not low and that 60 s "
+                                           "have passed since the ESP32 started"],
                 ["pH stuck (e.g. 19.71)", "Probe/BNC disconnected or not calibrated; check wiring, "
                                           "then calibrate"],
                 [f"{c('ec_low: true')}", "Solution below about 0.6 mS/cm (normal for plain water)"],

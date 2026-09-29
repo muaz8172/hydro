@@ -102,17 +102,13 @@ char    cmdBuf[32];
 uint8_t cmdLen = 0;
 
 // ================= EC =================
+// EC is read on 11 dB, the same range as pH. analogReadMilliVolts() converts with a calibration
+// made once for the global attenuation (11 dB by default), so reading this pin on 0 dB gave
+// millivolts about 3x too high (1413 uS/cm buffer showed ~680 mV instead of ~230 mV).
 float readEcVoltage()
 {
-  analogSetPinAttenuation(EC_PIN, ADC_0db);      // low range, more accurate
   analogRead(EC_PIN);
   int raw = analogRead(EC_PIN);
-
-  if (raw >= 3800) {                             // too high -> wide range
-    analogSetPinAttenuation(EC_PIN, ADC_11db);
-    analogRead(EC_PIN);
-    raw = analogRead(EC_PIN);
-  }
 
   if (raw == 0) {                                // below ESP32 ADC floor
     ecBelowRange = true;
@@ -424,6 +420,7 @@ void setup()
   EEPROM.begin(EEPROM_SIZE);
   analogReadResolution(12);
   analogSetPinAttenuation(PH_PIN, ADC_11db);
+  analogSetPinAttenuation(EC_PIN, ADC_11db);     // keep EC and pH on one range (see readEcVoltage)
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   digitalWrite(TRIG_PIN, LOW);

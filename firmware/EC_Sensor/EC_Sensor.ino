@@ -24,21 +24,14 @@ const char* adcRange = "0dB";
 bool  belowRange = false;
 DFRobot_EC ec;
 
-// Read EC voltage in mV, choosing the best ADC range automatically
+// Read EC voltage in mV on the 11 dB range (~150-3100 mV). analogReadMilliVolts() converts with
+// a calibration made once for the global attenuation (11 dB), so reading on 0 dB gave millivolts
+// about 3x too high.
 float readVoltage_mV()
 {
-  analogSetPinAttenuation(EC_PIN, ADC_0db);    // low range ~100-950 mV (more accurate)
-  analogRead(EC_PIN);                          // dummy read after range change
+  analogRead(EC_PIN);
   rawValue = analogRead(EC_PIN);
-
-  if (rawValue < 3800) {
-    adcRange = "0dB";
-  } else {
-    analogSetPinAttenuation(EC_PIN, ADC_11db); // wide range ~150-3100 mV
-    analogRead(EC_PIN);
-    rawValue = analogRead(EC_PIN);
-    adcRange = "11dB";
-  }
+  adcRange = "11dB";
 
   // signal below the ESP32 ADC floor (~100 mV) -> report 0 instead of a fake value
   if (rawValue == 0) {
@@ -75,6 +68,7 @@ void setup()
   delay(500);
   EEPROM.begin(32);            // required on ESP32
   analogReadResolution(12);
+  analogSetPinAttenuation(EC_PIN, ADC_11db);
   ec.begin();
 
   Serial.println();

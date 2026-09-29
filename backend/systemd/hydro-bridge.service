@@ -1,6 +1,10 @@
 [Unit]
 Description=ESP32 to MQTT bridge
-After=mosquitto.service
+# Runs only while the ESP32 is plugged in: dev-esp32.device comes from the udev rule
+# (backend/udev/99-esp32.rules). Plugging it in (or booting with it attached) starts the
+# bridge; unplugging it stops the bridge.
+BindsTo=dev-esp32.device
+After=dev-esp32.device mosquitto.service
 Wants=mosquitto.service
 
 [Service]
@@ -10,4 +14,4 @@ RestartSec=3
 User=hydro
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=dev-esp32.device

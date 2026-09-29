@@ -248,12 +248,15 @@ protocol websockets
 allow_anonymous true
 ```
 
-### 4. Bridge as a service (starts at boot)
+### 4. Bridge as a service (runs while the ESP32 is plugged in)
 ```bash
 sudo cp backend/systemd/hydro-bridge.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now hydro-bridge
+sudo systemctl disable hydro-bridge        # drop the old "start at boot" link, if any
+sudo systemctl enable --now hydro-bridge   # now tied to the ESP32 device
 ```
+The service is bound to `dev-esp32.device`: plugging the ESP32 in (or booting the Pi with it
+attached) starts the bridge, unplugging it stops the bridge, and shutdown stops it as usual.
 
 The bridge also logs every reading to CSV. Each time the ESP32 connects (plugged in, Pi
 reboot, or bridge restart) it starts a new file in `data/logs/`, named

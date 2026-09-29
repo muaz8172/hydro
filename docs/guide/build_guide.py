@@ -310,8 +310,8 @@ def cover():
         "offline). The camera frame is square and shows the same centre crop the stage model "
         "sees (the dataset is 224×224). Sensor tiles show a green dot or a short tag (LOW, "
         "HIGH, DRIFT); raw values move to hover tooltips. New Plant vision card (canopy with "
-        "change vs yesterday, yellowing, green index); a small 24 h graph follows the tile you "
-        "click. Sensor History has area charts with value tags, time-in-target rings, pump and "
+        "change vs yesterday, yellowing, green index) and an animated water tank driven by the "
+        "ultrasonic level sensor. Sensor History has area charts with value tags, time-in-target rings, pump and "
         "water-level bars, and a paged table. See section 3.6.<br/>"
         f"• Version 3: <b>New plant dataset:</b> {M['photos']} lettuce photos, balanced across the three "
         f"stages (seedling {M['per_stage'][0]}, vegetative {M['per_stage'][1]}, matured "
@@ -522,11 +522,13 @@ def how_it_works():
                 ["Live Monitoring", "Header: Live dot, ESP32 and Camera shown as Connected (green) or "
                              "Disconnected/Offline (red). Left: the camera photo in a square frame, "
                              "the same centre crop the stage model sees, with health, growth stage, "
-                             "size, confidence and Save photo. Right: six small tiles (pH, EC, water, "
-                             "air 25–36 °C, humidity, pump mode + tank) with a meter and a green dot "
-                             "or LOW/HIGH/DRIFT tag; pump rows; Plant vision (canopy % with change vs "
-                             "yesterday, yellowing % with Normal under 8 %, green index 0–1); a small "
-                             "24 h graph of the tile you click. Hover for details and raw values"],
+                             "size, confidence and Save photo. Right: tiles for pH, EC, air 25–36 °C "
+                             "and humidity with a meter and a green dot or LOW/HIGH/DRIFT tag, plus "
+                             "pump mode + tank state; pump rows; Plant vision (canopy % with change vs "
+                             "yesterday, yellowing % with Normal under 8 %, green index 0–1); an "
+                             "animated water tank filled to the ultrasonic level, with the 20 % "
+                             "dry-run line, an OK/LOW tag, water height and distance to the surface. "
+                             "Hover for details and raw values; click a tile for Sensor History"],
                 ["Sensor History", "Four area charts (pH purple, EC teal, air magenta, humidity blue) "
                                    "for 1 h, 24 h or 7 days, with dot markers and a tag on the highest "
                                    "value; hover shows values on all four. Below: time in target as ring "
@@ -631,6 +633,8 @@ def done():
                 ["f90c27b", "Charts leave empty time before/after the data blank"],
                 ["be3eed7", "Sensor History: area charts with value tags, time-in-target rings, "
                             "pump and water-level bars, paged table"],
+                ["b79f89d", "Live MQTT readings fed straight into the charts (no reload lag)"],
+                ["ee15e07", "Animated water tank on Live Monitoring; Water tile removed"],
                 ["(this version)", "System guide version 4 (updated)"]], [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],

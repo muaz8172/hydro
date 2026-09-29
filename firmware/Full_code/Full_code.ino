@@ -38,24 +38,6 @@
 
 #include <DHT.h>
 #include <EEPROM.h>
-#include "esp_flash.h"
-
-// ---------- Crash hunt (temporary) ----------
-// An EC save crashed in spi_flash_op_lock: the flash mutex had been overwritten by the time
-// EEPROM.commit() ran. After every step of loop() we do a tiny flash read (same lock) and
-// remember the step in RTC memory, which survives the crash reboot, so the next boot can
-// say which step broke it.
-RTC_NOINIT_ATTR char     probeStep[24];
-RTC_NOINIT_ATTR uint32_t probeMagic;
-#define PROBE_MAGIC 0x48594452   // "HYDR"
-void probe(const char* step)
-{
-  strncpy(probeStep, step, sizeof(probeStep) - 1);
-  probeStep[sizeof(probeStep) - 1] = 0;
-  probeMagic = PROBE_MAGIC;
-  uint32_t word;
-  esp_flash_read(esp_flash_default_chip, &word, 0x1000, sizeof(word));   // takes the flash lock
-}
 
 // ---------- Pins ----------
 #define DHT_PIN        15
@@ -366,8 +348,6 @@ void printStatus()
   bool never = ecBootBytes[0] == 0xFF && ecBootBytes[1] == 0xFF && ecBootBytes[2] == 0xFF && ecBootBytes[3] == 0xFF;
   if (never) Serial.println("# EC   flash at boot: empty (never saved)");
   else       Serial.printf("# EC   flash at boot: Klow=%.3f  Khigh=%.3f\n", bootLow, bootHigh);
-  Serial.printf("# Debug loop stack free %u bytes, heap free %u bytes\n",
-                (unsigned)uxTaskGetStackHighWaterMark(NULL), (unsigned)ESP.getFreeHeap());
   Serial.printf("# pH   V7=%.0fmV  V4=%.0fmV  slope=%.1fmV/pH\n",
                 phV7, phV4, (phV4 - phV7) / 3.0);
   Serial.printf("# Tank empty=%.1fcm  full=%.1fcm%s\n",
@@ -514,9 +494,6 @@ void setup()
 
   Serial.begin(115200);
   delay(500);
-  if (probeMagic == PROBE_MAGIC && esp_reset_reason() == ESP_RST_PANIC)
-    Serial.printf("# CRASH after step: %s\n", probeStep);
-  probeMagic = 0;
   EEPROM.begin(EEPROM_SIZE);
   analogReadResolution(12);
   analogSetPinAttenuation(PH_PIN, ADC_11db);
@@ -538,9 +515,7 @@ void setup()
 
 void loop()
 {
-  probe("loop start");
   readSerialCommands();
-  probe("serial commands");
 
   static unsigned long last = 0;
   if (millis() - last >= SEND_INTERVAL) {
@@ -549,25 +524,19 @@ void loop()
     float hum  = dht.readHumidity();
     float temp = dht.readTemperature();
     if (!isnan(temp)) lastAirTemp = temp;
-    probe("DHT22");
 
     ecVoltage     = readEcVoltage();
-    probe("EC ADC");
     float ecValue = ecFromMv(ecVoltage, waterTemp);
-    probe("EC maths");
 
     float po = readPhPo();
     float ph = phFromPo(po);
-    probe("pH ADC");
 
     float dist = readDistanceCm(lastAirTemp);
-    probe("ultrasonic");
     float levelCm, levelPct;
     computeLevel(dist, levelCm, levelPct);
     bool levelLow = !isnan(levelPct) && levelPct < LOW_LEVEL_PCT;
 
     updatePumps(ecValue, ph, levelLow);
-    probe("pumps");
 
     // ---- JSON line for the Pi ----
     Serial.print('{');
@@ -590,7 +559,6 @@ void loop()
     if (isnan(temp)) Serial.print("null");
     else Serial.print(temp >= TEMP_MIN && temp <= TEMP_MAX ? "true" : "false");
     Serial.println('}');
-    probe("JSON print");
 
     if (debugMode) {
       Serial.printf("# T=%.1fC H=%.1f%%  EC=%.2f (%.0fmV%s)  pH=%.2f (Po %.0fmV)  Level=%.1fcm %.0f%% (dist %.1fcm)\n",

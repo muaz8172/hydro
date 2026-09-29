@@ -31,11 +31,11 @@
     --st-veg: #8fbf5c;
     --st-mat: #3f6a22;
     /* one colour per sensor, shared by the overview graph and the Graphs tab */
-    --c-ph: #8b6fd6;
-    --c-ec: #3fa9e6;
-    --c-temp: #e8894a;
-    --c-hum: #2fa88f;
-    --c-level: #5b7fd6;
+    --c-ph: #7b4df0;
+    --c-ec: #13b5c9;
+    --c-temp: #ee3fc0;
+    --c-hum: #3d5afe;
+    --c-level: #2f8fe0;
     --radius: 10px;
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --sans: "DM Sans", system-ui, sans-serif;
@@ -216,29 +216,61 @@
   #v-graphs { display: flex; flex-direction: column; gap: 16px; }
   .gtool { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .gtool > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .charts { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 16px; }
-  .chart { display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 14px 16px 6px; }
-  .chart .hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  .chart .hd h2 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; color: var(--muted); }
-  .chart .rd { font: 12.5px var(--sans); color: var(--ink); }
-  .chart .rd small { color: var(--muted); margin-right: 8px; font-size: 11px; }
+  .ttl { margin: 0; font: 700 12px var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
+  .ttl .u { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); margin-left: 6px; }
+  /* four area charts */
+  .charts { flex: 0 0 240px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .chart { display: flex; flex-direction: column; gap: 4px; min-height: 0; padding: 16px 16px 6px; }
+  .chart .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .chart .rd { font: 12px var(--sans); color: var(--ink); white-space: nowrap; }
+  .chart .rd small { color: var(--muted); margin-right: 6px; font-size: 11px; }
   .plot { flex: 1; min-height: 0; position: relative; }
   .plot .uplot { position: absolute; inset: 0; }
   .swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
-  .tablewrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { padding: 7px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  th { position: sticky; top: 0; background: var(--card); font-weight: 500; color: var(--muted); }
-  th:first-child, td:first-child { text-align: left; }
-  td { font-variant-numeric: tabular-nums; }
-  .lanes-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
-  .lanes { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 16px; align-items: center; font-size: 12.5px; }
-  .lanes .lb { color: var(--muted); cursor: default; }
-  .lane { position: relative; height: 14px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+  /* summary cards under the charts */
+  .ginfo { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.1fr) minmax(0, 0.8fr); gap: 16px; }
+  .gcard { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; min-height: 0; }
+  .gcard .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .rings { flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: space-around; gap: 16px; }
+  .ring { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); text-align: center; }
+  .ring .g { position: relative; width: 96px; height: 96px; }
+  .ring svg { display: block; transform: rotate(-90deg); }
+  .ring .pc { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 700 21px var(--sans); color: var(--ink); }
+  .ring .pc small { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .bars, .caps { flex: 1; min-height: 110px; display: flex; gap: 4px; }
+  .bcol, .cap { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .bcol .track { flex: 1; width: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; }
+  .tag { font: 700 10px/1 var(--sans); color: #fff; background: var(--text); border-radius: 4px; padding: 3px 5px; white-space: nowrap; }
+  .bcol .bar { width: 18px; max-width: 70%; border-radius: 4px; background: linear-gradient(var(--c-hum), var(--c-ph)); }
+  .bcol .bar.zero { height: 3px; background: var(--line); }
+  .xl { font-size: 10px; color: var(--faint); height: 13px; white-space: nowrap; }
+  .thin .xl.odd { visibility: hidden; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .stat b { display: block; font: 700 26px/1.1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
+  .stat i { display: block; width: 44px; height: 3px; border-radius: 2px; margin: 7px 0 6px; }
+  .stat span { font-size: 11.5px; color: var(--muted); }
+  .cap .tube { flex: 1; width: 18px; max-width: 70%; box-sizing: border-box; border: 1.5px solid #dadcf5; border-radius: 9px; padding: 2px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .cap .fill { width: 100%; border-radius: 6px; background: linear-gradient(var(--c-ec), var(--c-hum)); }
+  .divide { border-top: 1px solid var(--line); padding-top: 16px; }
+  .lane { position: relative; height: 14px; border-radius: 7px; background: var(--sunk); overflow: hidden; }
   .lane svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .lane .xh { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ink); opacity: 0.6; }
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-left: 126px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  /* table: pages instead of scrolling */
+  .tablewrap { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { height: 40px; padding: 0 16px; text-align: right; border-bottom: 1px solid #f1f0ec; white-space: nowrap; }
+  th { font-size: 12px; font-weight: 500; color: var(--muted); border-bottom-color: var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  td { color: var(--ink); }
+  td:first-child { color: var(--text); }
+  .pager { margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+  .pager nav { display: flex; align-items: center; gap: 2px; }
+  .pager button { min-width: 34px; min-height: 34px; padding: 0 8px; border: 0; background: transparent; color: var(--text); }
+  .pager button[aria-current="page"] { background: var(--ink); color: #fff; }
+  .pager button.arrow { border: 1px solid var(--line); background: var(--card); margin: 0 6px; }
+  .pager .gap { padding: 0 6px; }
   .hatch { background: repeating-linear-gradient(45deg, #d5d3cc 0 2px, var(--sunk) 2px 5px); }
   .msg { font-size: 12.5px; color: var(--bad); }
 
@@ -298,8 +330,9 @@
     main { grid-template-columns: minmax(0, 1fr); }
     .photo { width: 100%; }
     .mini { min-height: 180px; }
-    .charts { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: 240px; }
-    .tablewrap { max-height: 70vh; }
+    .charts { flex: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 220px; }
+    .ginfo { grid-template-columns: minmax(0, 1fr); }
+    .tablewrap { min-height: 70vh; }
     #v-calibration { grid-template-columns: minmax(0, 1fr); }
     .stepbody { grid-template-columns: minmax(0, 1fr); }
     .vrow { gap: 20px; flex-wrap: wrap; }
@@ -376,16 +409,33 @@
       </div>
     </div>
     <div class="charts" id="charts"></div>
-    <div class="tablewrap" id="table-area" hidden><table id="tbl"></table></div>
-    <section class="card lanes-card" aria-label="Pumps and plant stage">
-      <div class="lanes" id="lanes"></div>
-      <div class="legend">
-        <span><i class="swatch" style="background:var(--st-seed)"></i>Seedling</span>
-        <span><i class="swatch" style="background:var(--st-veg)"></i>Vegetative</span>
-        <span><i class="swatch" style="background:var(--st-mat)"></i>Matured</span>
-        <span><i class="swatch hatch"></i>Uncertain</span>
-      </div>
-    </section>
+    <div class="ginfo" id="ginfo">
+      <section class="card gcard" aria-label="Time in target">
+        <h2 class="ttl">Time in target</h2>
+        <div class="rings" id="rings"></div>
+      </section>
+      <section class="card gcard" aria-label="Nutrient pumps">
+        <div class="hd"><h2 class="ttl">Nutrient pumps</h2><span class="sub" id="pump-unit"></span></div>
+        <div class="bars" id="bars"></div>
+        <div class="stats" id="stats"></div>
+      </section>
+      <section class="card gcard" aria-label="Water level and plant stage">
+        <h2 class="ttl">Water level</h2>
+        <div class="caps" id="caps"></div>
+        <h2 class="ttl divide">Plant stage</h2>
+        <div class="lane" id="stage-lane"></div>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--st-seed)"></i>Seedling</span>
+          <span><i class="swatch" style="background:var(--st-veg)"></i>Vegetative</span>
+          <span><i class="swatch" style="background:var(--st-mat)"></i>Matured</span>
+          <span><i class="swatch hatch"></i>Uncertain</span>
+        </div>
+      </section>
+    </div>
+    <div class="tablewrap" id="table-area" hidden>
+      <table id="tbl"></table>
+      <div class="pager"><span id="pg-info"></span><nav aria-label="Pages" id="pg-nav"></nav></div>
+    </div>
   </section>
 
   <!-- ======================= CALIBRATION ======================= -->
@@ -766,12 +816,13 @@ function hatch(ctx) {
   x.beginPath(); x.moveTo(0, 8); x.lineTo(8, 0); x.stroke();
   return ctx.createPattern(c, "repeat");
 }
-// Shared look: smooth line in the sensor's colour, soft fade under it, light vertical grid only.
+// Shared look: smooth line in the sensor's colour, a fade under it, light vertical grid only.
+// The Sensor History charts add white dot markers (about 12 per chart) and a dark tag on the peak.
 function chartOpts(s, mini) {
   const color = colorOf(s.key), font = "11px " + css("--sans");
   return {
     width: 400, height: 200, legend: { show: false },
-    padding: mini ? [6, 4, 0, 4] : [8, 8, 0, 0],
+    padding: mini ? [6, 4, 0, 4] : [30, 10, 0, 10],
     cursor: mini ? { show: false } : { sync: { key: "hydro" }, drag: { x: false, y: false }, points: { size: 7, fill: color }, y: false },
     scales: {
       x: { time: true },
@@ -785,24 +836,55 @@ function chartOpts(s, mini) {
     axes: [
       { stroke: css("--muted"), font, grid: { stroke: css("--line"), width: 1 }, ticks: { show: false }, gap: 4, size: 24,
         values: (u, ts) => ts.map((t) => fmtTime(t, mini ? "24h" : gRange)), space: mini ? 56 : 80 },
-      mini ? { show: false }
-           : { stroke: css("--muted"), font, size: 40, grid: { show: false }, ticks: { show: false },
-               values: (u, v) => v.map((x) => x.toFixed(s.dec === 2 ? 1 : 0)) },
+      { show: false },
     ],
     series: [{}, {
-      stroke: color, width: 2, spanGaps: false, points: { show: false },
+      stroke: color, width: mini ? 2 : 2.5, spanGaps: false,
+      points: mini ? { show: false } : { show: true, size: 9, width: 2, fill: "#fff", stroke: color, filter: markerIdx },
       paths: uPlot.paths.spline(),
       fill: (u) => {
         const g = u.ctx.createLinearGradient(0, u.bbox.top, 0, u.bbox.top + u.bbox.height);
-        g.addColorStop(0, rgba(color, 0.26)); g.addColorStop(1, rgba(color, 0));
+        g.addColorStop(0, rgba(color, mini ? 0.26 : 0.5)); g.addColorStop(1, rgba(color, 0.02));
         return g;
       },
     }],
     hooks: mini ? {} : {
       drawClear: [(u) => drawBackdrop(u, s)],
+      draw: [(u) => drawPeak(u, s)],
       setCursor: [(u) => onCursor(u)],
     },
   };
+}
+// about 12 evenly spaced markers, skipping empty buckets
+function markerIdx(u) {
+  const d = u.data[1];
+  if (!d || !d.length) return null;
+  const step = Math.max(1, Math.round(d.length / 12)), out = [];
+  for (let i = Math.floor(step / 2); i < d.length; i += step) if (d[i] != null) out.push(i);
+  return out;
+}
+// dark value tag over the highest reading
+function drawPeak(u, s) {
+  const xs = u.data[0], ys = u.data[1];
+  let im = -1;
+  for (let i = 0; i < ys.length; i++) if (ys[i] != null && (im < 0 || ys[i] > ys[im])) im = i;
+  if (im < 0) return;
+  const ctx = u.ctx, px = devicePixelRatio, { left, top, width } = u.bbox;
+  const x = u.valToPos(xs[im], "x", true), y = u.valToPos(ys[im], "y", true);
+  const text = ys[im].toFixed(s.dec);
+  ctx.save();
+  ctx.font = `700 ${11 * px}px ${css("--sans")}`;
+  const w = ctx.measureText(text).width + 12 * px, h = 18 * px;
+  const bx = Math.min(Math.max(x - w / 2, left), left + width - w);
+  const above = y - h - 9 * px >= top - 26 * px, by = above ? y - h - 9 * px : y + 9 * px;
+  ctx.fillStyle = css("--text");
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(bx, by, w, h, 5 * px); else ctx.rect(bx, by, w, h);
+  ctx.fill();
+  if (above) { ctx.beginPath(); ctx.moveTo(x - 4 * px, by + h); ctx.lineTo(x + 4 * px, by + h); ctx.lineTo(x, by + h + 4 * px); ctx.fill(); }
+  ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(text, bx + w / 2, by + h / 2 + 0.5 * px);
+  ctx.restore();
 }
 function fitPlot(u, plot) {
   new ResizeObserver(() => { if (plot.clientWidth) u.setSize({ width: plot.clientWidth, height: plot.clientHeight }); }).observe(plot);
@@ -812,7 +894,7 @@ function buildCharts() {
   for (const s of G_SERIES) {
     const c = el("section", "card chart");
     c.setAttribute("aria-label", s.label + " history");
-    c.innerHTML = `<div class="hd"><h2><i class="swatch" style="background:${colorOf(s.key)}"></i>${s.label}${s.unit ? ` · ${s.unit}` : ""}</h2><span class="rd"><small></small><b>—</b></span></div>
+    c.innerHTML = `<div class="hd"><h2 class="ttl">${s.label}${s.unit ? `<span class="u">${s.unit}</span>` : ""}</h2><span class="rd"><small></small><b>—</b></span></div>
       <div class="plot"></div>`;
     box.appendChild(c);
     const plot = c.querySelector(".plot");
@@ -906,63 +988,151 @@ function onCursor(u) {
   const i = u.cursor.idx;
   readouts(i == null ? null : i);
   const f = i == null || !gHist ? null : (u.data[0][i] - gHist.start) / (gHist.end - gHist.start);
-  for (const xh of document.querySelectorAll("#lanes .xh")) {
+  for (const xh of document.querySelectorAll("#stage-lane .xh")) {
     xh.hidden = f == null;
     if (f != null) xh.style.left = (f * 100) + "%";
   }
 }
-function drawLanes() {
-  const box = $("lanes"); box.textContent = "";
+// ---------- summary cards ----------
+// the range split into equal buckets: 5 min for 1 h, 2 h for 24 h, 1 day for 7 d
+const BUCKETS = { "1h": 12, "24h": 12, "7d": 7 };
+function buckets() {
+  const n = BUCKETS[gRange], span = (gHist.end - gHist.start) / n;
+  return Array.from({ length: n }, (_, i) => ({ a: gHist.start + i * span, b: gHist.start + (i + 1) * span }));
+}
+function bucketLabel(t) {
+  const d = new Date(t * 1000);
+  if (gRange === "7d") return d.toLocaleDateString([], { weekday: "short" });
+  if (gRange === "24h") return String(d.getHours()).padStart(2, "0");
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+function values(key, a, b) {
+  const out = [];
+  for (let i = 0; i < gHist.t.length; i++) if (gHist.t[i] >= a && gHist.t[i] < b && gHist[key][i] != null) out.push(gHist[key][i]);
+  return out;
+}
+const mean = (v) => v.length ? v.reduce((x, y) => x + y, 0) / v.length : null;
+function drawRings() {
+  const box = $("rings"); box.textContent = "";
+  const r = 38, circ = 2 * Math.PI * r;
+  for (const s of G_SERIES) {
+    const v = gHist ? values(s.key, gHist.start, gHist.end + 1) : [];
+    const pct = v.length ? Math.round(100 * v.filter((x) => x >= s.band[0] && x <= s.band[1]).length / v.length) : null;
+    const d = el("div", "ring");
+    d.title = v.length ? `${v.length} readings in this range` : "No readings in this range";
+    d.innerHTML = `<div class="g"><svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true">
+        <circle cx="48" cy="48" r="${r}" fill="none" stroke="#efeef4" stroke-width="9"/>
+        ${pct ? `<circle cx="48" cy="48" r="${r}" fill="none" stroke="${colorOf(s.key)}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${(circ * pct / 100).toFixed(1)} ${circ.toFixed(1)}"/>` : ""}
+      </svg><div class="pc">${pct == null ? "—" : pct + "<small>%</small>"}</div></div>
+      <span>${s.label} ${s.band[0]}–${s.band[1]}${s.unit ? " " + s.unit : ""}</span>`;
+    box.appendChild(d);
+  }
+}
+function drawBars() {
+  const box = $("bars"); box.textContent = "";
+  box.classList.toggle("thin", gRange === "1h");
+  $("pump-unit").textContent = { "1h": "minutes on, per 5 min", "24h": "minutes on, per 2 h", "7d": "minutes on, per day" }[gRange];
+  if (!gHist) return;
+  const runs = gAct && gAct.pumps.pump_a ? gAct.pumps.pump_a.runs : [];   // A and B always run together
+  const bs = buckets().map((k) => {
+    let sec = 0;
+    for (const r of runs) sec += Math.max(0, Math.min(r.end, k.b) - Math.max(r.start, k.a));
+    return { ...k, min: sec / 60 };
+  });
+  const cap = Math.max(1, ...bs.map((k) => k.min));
+  bs.forEach((k, i) => {
+    const c = el("div", "bcol");
+    const val = k.min < 10 ? k.min.toFixed(1).replace(/\.0$/, "") : Math.round(k.min);
+    c.innerHTML = `<div class="track">${k.min > 0.05 ? `<span class="tag">${val}</span><span class="bar" style="height:${(k.min / cap * 100).toFixed(1)}%"></span>` : '<span class="bar zero"></span>'}</div>
+      <span class="xl${i % 2 ? " odd" : ""}">${bucketLabel(k.a)}</span>`;
+    box.appendChild(c);
+  });
+}
+function drawStats() {
+  const box = $("stats"); box.textContent = "";
+  for (const s of G_SERIES) {
+    const m = gHist ? mean(values(s.key, gHist.start, gHist.end + 1)) : null;
+    box.appendChild(el("div", "stat", `<b>${m == null ? "—" : m.toFixed(s.dec)}</b><i style="background:${colorOf(s.key)}"></i><span>${s.label} average</span>`));
+  }
+}
+function drawCaps() {
+  const box = $("caps"); box.textContent = "";
+  box.classList.toggle("thin", gRange !== "7d");
+  if (!gHist) return;
+  buckets().forEach((k, i) => {
+    const m = mean(values("level_pct", k.a, k.b));
+    const c = el("div", "cap");
+    c.title = m == null ? "No water level reading" : `Water ${Math.round(m)} %`;
+    c.innerHTML = `<div class="tube">${m == null ? "" : `<span class="fill" style="height:${Math.max(4, Math.min(100, m)).toFixed(0)}%"></span>`}</div>
+      <span class="xl${i % 2 ? " odd" : ""}">${bucketLabel(k.a)}</span>`;
+    box.appendChild(c);
+  });
+}
+function drawStage() {
+  const lane = $("stage-lane"); lane.textContent = "";
   if (!gHist) return;
   const start = gHist.start, span = gHist.end - gHist.start;
-  const rows = [["pump_a", "Nutrient A"], ["pump_b", "Nutrient B"], ["pump_sample", "Sampling"], ["stage", "Plant stage"]];
-  for (const [k, name] of rows) {
-    let extra = "";
-    if (k !== "stage" && gAct && gAct.pumps[k]) {
-      const p = gAct.pumps[k], m = p.on_seconds / 60;
-      extra = `${p.count} run${p.count === 1 ? "" : "s"} · ${m < 60 ? Math.round(m) + " min" : (m / 60).toFixed(1) + " h"}`;
+  const svg = svgEl("svg", { viewBox: "0 0 1000 18", preserveAspectRatio: "none", "aria-hidden": "true" }, lane);
+  const X = (t) => Math.max(0, Math.min(1000, (t - start) / span * 1000));
+  if (gVis) {
+    const defs = svgEl("defs", {}, svg), pat = svgEl("pattern", { id: "lh", width: 5, height: 5, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    svgEl("rect", { width: 5, height: 5, fill: css("--sunk") }, pat); svgEl("line", { x1: 0, y1: 0, x2: 0, y2: 5, stroke: "#c9c6bc", "stroke-width": 1.5 }, pat);
+    const rows = gVis.rows;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i], next = i + 1 < rows.length ? rows[i + 1].ts : gHist.end;
+      const end = Math.min(next, r.ts + 1800);             // a check covers at most 30 min
+      const fill = STAGES[r.stage] ? STAGES[r.stage].color : r.stage === "uncertain" ? "url(#lh)" : null;
+      if (fill) svgEl("rect", { x: X(r.ts), y: 0, width: Math.max(1.5, X(end) - X(r.ts)), height: 18, fill }, svg);
     }
-    const lb = el("div", "lb", name.replace("Plant stage", "Stage"));
-    if (extra) lb.title = extra;
-    const lane = el("div", "lane");
-    box.append(lb, lane);
-    const svg = svgEl("svg", { viewBox: "0 0 1000 18", preserveAspectRatio: "none", "aria-hidden": "true" }, lane);
-    const X = (t) => Math.max(0, Math.min(1000, (t - start) / span * 1000));
-    if (k !== "stage") {
-      for (const r of (gAct && gAct.pumps[k] ? gAct.pumps[k].runs : [])) {
-        svgEl("rect", { x: X(r.start), y: 3, width: Math.max(1.5, X(r.end) - X(r.start)), height: 12, rx: 2, fill: css("--active"), opacity: r.cut ? 0.55 : 1 }, svg);
-      }
-    } else if (gVis) {
-      const defs = svgEl("defs", {}, svg), pat = svgEl("pattern", { id: "lh", width: 5, height: 5, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
-      svgEl("rect", { width: 5, height: 5, fill: css("--sunk") }, pat); svgEl("line", { x1: 0, y1: 0, x2: 0, y2: 5, stroke: "#c9c6bc", "stroke-width": 1.5 }, pat);
-      const rows = gVis.rows;
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i], next = i + 1 < rows.length ? rows[i + 1].ts : gHist.end;
-        const end = Math.min(next, r.ts + 1800);             // a check covers at most 30 min
-        const fill = STAGES[r.stage] ? STAGES[r.stage].color : r.stage === "uncertain" ? "url(#lh)" : null;
-        if (fill) svgEl("rect", { x: X(r.ts), y: 0, width: Math.max(1.5, X(end) - X(r.ts)), height: 18, fill }, svg);
-      }
-    }
-    const xh = el("div", "xh"); xh.hidden = true; lane.appendChild(xh);
   }
+  const xh = el("div", "xh"); xh.hidden = true; lane.appendChild(xh);
+}
+
+// ---------- table, one page at a time ----------
+let gPage = 0;
+function tableRows() {
+  const h = gHist, rows = [];
+  if (!h) return rows;
+  for (let i = h.t.length - 1; i >= 0; i--) if (!G_SERIES.every((s) => h[s.key][i] == null) || h.level_pct[i] != null) rows.push(i);
+  return rows;                                               // newest first
 }
 function drawTable() {
-  const h = gHist, rows = [];
-  if (h) {
-    for (let i = h.t.length - 1; i >= 0 && rows.length < 400; i--) {
-      if (G_SERIES.every((s) => h[s.key][i] == null)) continue;
-      const f = (v, n) => v == null ? "—" : v.toFixed(n);
-      rows.push(`<tr><td>${esc(new Date(h.t[i] * 1000).toLocaleString())}</td><td>${f(h.ph[i], 2)}</td><td>${f(h.ec[i], 2)}</td><td>${f(h.temp[i], 1)}</td><td>${f(h.hum[i], 1)}</td><td>${f(h.level_pct[i], 0)}</td></tr>`);
-    }
-  }
+  const h = gHist, rows = tableRows();
+  const wrap = $("table-area");
+  const per = Math.max(5, Math.floor((wrap.clientHeight - 41 - 56) / 40) || 15);   // as many as fit, no scrolling
+  const pages = Math.max(1, Math.ceil(rows.length / per));
+  gPage = Math.min(gPage, pages - 1);
+  const f = (v, n) => v == null ? "—" : v.toFixed(n);
+  const body = rows.slice(gPage * per, gPage * per + per).map((i) =>
+    `<tr><td>${esc(new Date(h.t[i] * 1000).toLocaleString([], { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }))}</td><td>${f(h.ph[i], 2)}</td><td>${f(h.ec[i], 2)}</td><td>${f(h.temp[i], 1)}</td><td>${f(h.hum[i], 1)}</td><td>${f(h.level_pct[i], 0)}</td></tr>`).join("");
   $("tbl").innerHTML = `<thead><tr><th>Time</th><th>pH</th><th>EC mS/cm</th><th>Air °C</th><th>Humidity %</th><th>Water %</th></tr></thead>
-    <tbody>${rows.join("") || '<tr><td colspan="6">No readings in this range.</td></tr>'}</tbody>`;
+    <tbody>${body || '<tr><td colspan="6">No readings in this range.</td></tr>'}</tbody>`;
+  const from = rows.length ? gPage * per + 1 : 0, to = Math.min(rows.length, gPage * per + per);
+  $("pg-info").textContent = `${from}–${to} of ${rows.length.toLocaleString()}`;
+  // page numbers: first, last, and the ones around the current page
+  const nums = [...new Set([0, gPage - 1, gPage, gPage + 1, pages - 1])].filter((n) => n >= 0 && n < pages).sort((x, y) => x - y);
+  let html = `<button type="button" class="arrow" data-p="${gPage - 1}" aria-label="Previous page"${gPage ? "" : " disabled"}>‹</button>`;
+  nums.forEach((n, j) => {
+    if (j && n - nums[j - 1] > 1) html += '<span class="gap">…</span>';
+    html += `<button type="button" data-p="${n}"${n === gPage ? ' aria-current="page"' : ""}>${n + 1}</button>`;
+  });
+  html += `<button type="button" class="arrow" data-p="${gPage + 1}" aria-label="Next page"${gPage < pages - 1 ? "" : " disabled"}>›</button>`;
+  $("pg-nav").innerHTML = html;
 }
+$("pg-nav").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-p]"); if (!b || b.disabled) return;
+  gPage = +b.dataset.p; drawTable();
+});
+new ResizeObserver(() => { if (gTable && currentTab === "graphs") drawTable(); }).observe($("table-area"));
+
 function renderGraphs() {
-  $("charts").hidden = gTable; $("table-area").hidden = !gTable;
+  $("charts").hidden = gTable; $("ginfo").hidden = gTable; $("table-area").hidden = !gTable;
   if (gTable) drawTable();
-  else if (gHist) for (const k in charts) charts[k].u.setData([gHist.t, gHist[k]]);
-  drawLanes(); readouts(null);
+  else {
+    if (gHist) for (const k in charts) charts[k].u.setData([gHist.t, gHist[k]]);
+    drawRings(); drawBars(); drawStats(); drawCaps(); drawStage();
+  }
+  readouts(null);
 }
 async function loadGraphs() {
   if (!Object.keys(charts).length) buildCharts();
@@ -984,10 +1154,10 @@ async function loadGraphs() {
 }
 $("ranges").addEventListener("click", (e) => {
   const b = e.target.closest("[data-r]"); if (!b || b.dataset.r === gRange) return;
-  gRange = b.dataset.r; segSelect($("ranges"), b); loadGraphs();
+  gRange = b.dataset.r; gPage = 0; segSelect($("ranges"), b); loadGraphs();
 });
 $("btn-table").addEventListener("click", (e) => {
-  gTable = !gTable; e.currentTarget.setAttribute("aria-pressed", String(gTable));
+  gTable = !gTable; gPage = 0; e.currentTarget.setAttribute("aria-pressed", String(gTable));
   e.currentTarget.textContent = gTable ? "Charts" : "Table"; renderGraphs();
 });
 

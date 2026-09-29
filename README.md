@@ -152,6 +152,12 @@ Lines starting with `#` or `>>>` are messages, not data.
 In `Full_code.ino`, Pump A and Pump B **run until EC and pH both reach the target, then stop**. If either value leaves the target again, both pumps start again.
 
 Targets are set at the top of `Full_code.ino`. Pumps run when EC **or** pH is **lower or higher** than the target, and stop when both are inside. Auto mode is on at boot.
+
+**Start delay:** every time the ESP32 starts (Pi reboot, bridge restart or USB replug all restart it), auto control waits before switching the pumps on: **sampling pump after 30 s, Pump A/B after 60 s**. Manual commands (`pumpaon`, `pumpbon`, `sampleon`) work straight away. Change the times at the top of `Full_code.ino`:
+```cpp
+#define SAMPLE_START_DELAY  30000UL   // ms
+#define PUMP_START_DELAY    60000UL   // ms
+```
 ```cpp
 #define EC_MIN  1.2      // mS/cm
 #define EC_MAX  1.8      // mS/cm
@@ -182,7 +188,7 @@ The pump state is in every JSON line (`pump_a`, `pump_b`, `pump_auto`), and `sta
 
 ### Sampling pump (always on)
 
-**Relay 2 IN1 (GPIO27)**, on the second 2-channel relay, drives the sampling pump. It **runs all the time** from boot (switched on with the first reading, ~2 s after start-up) and is not affected by EC/pH.
+**Relay 2 IN1 (GPIO27)**, on the second 2-channel relay, drives the sampling pump. It **runs all the time**, starting 30 s after the ESP32 boots (see start delay above), and is not affected by EC/pH.
 
 | Command | Action |
 |---|---|

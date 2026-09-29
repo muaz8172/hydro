@@ -313,6 +313,9 @@ def cover():
         "change vs yesterday, yellowing, green index) and an animated water tank driven by the "
         "ultrasonic level sensor. Sensor History has area charts with value tags, time-in-target rings, pump and "
         "water-level bars, and a paged table. See section 3.6.<br/>"
+        "• <b>Pump start delay:</b> after every ESP32 boot (Pi reboot or USB replug) the "
+        "sampling pump waits 30 s and Pump A/B wait 60 s before auto control turns them on. "
+        "See section 3.2.<br/>"
         f"• Version 3: <b>New plant dataset:</b> {M['photos']} lettuce photos, balanced across the three "
         f"stages (seedling {M['per_stage'][0]}, vegetative {M['per_stage'][1]}, matured "
         f"{M['per_stage'][2]}), all resized to 224×224 for training. Before: 41 photos with only "
@@ -396,8 +399,8 @@ def hardware():
         "Relay VCC goes to the ESP32's 5 V, and relay GND must be shared with the ESP32 GND, "
         "otherwise the IN signals have no reference.",
         "At boot every relay pin is set to OFF before it becomes an output, so no pump kicks on "
-        "while the ESP32 starts. The sampling pump switches on with the first reading (about 2 s "
-        "after start-up).",
+        "while the ESP32 starts. The sampling pump switches on 30 s after start-up and Pump A/B "
+        "auto control starts after 60 s (see 3.2).",
         "The spare channel (relay 2 IN2) is free for a future grow-light relay (see section 8). "
         "It is not used by the firmware yet."])
     s += callout("<b>Mains safety.</b> If a pump or a future grow light runs on mains voltage, keep "
@@ -444,6 +447,9 @@ def how_it_works():
         f"<b>Manual</b>: {c('pumpaon')}, {c('pumpaoff')}, {c('pumpbon')}, {c('pumpboff')} switch to "
         f"manual; {c('pumpauto')} goes back to auto.",
         "A pH reading that is not a number stops Pumps A and B for safety.",
+        f"<b>Start delay</b>: after every ESP32 boot (Pi reboot, bridge restart or USB replug) the "
+        f"sampling pump waits 30 s ({c('SAMPLE_START_DELAY')}) and Pump A/B wait 60 s "
+        f"({c('PUMP_START_DELAY')}) before auto turns them on. Manual commands are not delayed.",
         f"Air temperature is only checked against 25–36 °C and reported as {c('temp_ok')}. No "
         "relay acts on it."])
     s += table([["Situation", "Pump A + Pump B (relay 1)", "Sampling pump (relay 2)"],

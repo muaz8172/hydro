@@ -20,7 +20,10 @@
  * Pumps (auto): Pump A + Pump B run until EC AND pH both reach the target
  *   (EC 1.2-1.8 mS/cm and pH 5.5-6.5), then stop. They start again when
  *   either one goes lower or higher than the target. Auto mode at boot. Bad pH reading -> OFF.
- *   Sampling pump: runs all the time (from boot). sampleoff / sampleon to stop/start.
+ *   Sampling pump: runs all the time. sampleoff / sampleon to stop/start.
+ *   Start delay: after every ESP32 boot (Pi reboot, bridge restart or USB replug) the sampling
+ *   pump waits SAMPLE_START_DELAY and Pump A/B wait PUMP_START_DELAY before auto turns them on.
+ *   Manual commands (pumpaon, pumpbon, sampleon) are not delayed.
  *   Tank low (level_low, once tank is calibrated) -> ALL pumps OFF, even in manual.
  *
  * Serial commands (115200, line ending = Newline):
@@ -60,6 +63,9 @@
 // Air temperature target (DHT22), reported as temp_ok; no pump or relay acts on it
 #define TEMP_MIN       25.0     // C
 #define TEMP_MAX       36.0     // C
+// Start delay after ESP32 boot (Pi reboot / USB replug both restart the ESP32)
+#define SAMPLE_START_DELAY  30000UL   // ms before the sampling pump starts
+#define PUMP_START_DELAY    60000UL   // ms before Pump A/B auto control starts
 
 // ---------- Settings ----------
 #define SEND_INTERVAL  2000     // ms between JSON lines
@@ -323,9 +329,20 @@ void updatePumps(float ecValue, float ph, bool levelLow)
     return;
   }
 
-  setPump(SAMPLE_PIN, sampleOn, sampleEnabled);  // always on unless sampleoff
+  // start delay: leave relays alone until the delay has passed
+  static bool sampleWaited = false, pumpWaited = false;
+  if (!sampleWaited && millis() >= SAMPLE_START_DELAY) {
+    sampleWaited = true;
+    Serial.println("# Sampling pump start delay over");
+  }
+  if (!pumpWaited && millis() >= PUMP_START_DELAY) {
+    pumpWaited = true;
+    Serial.println("# Pump A/B start delay over");
+  }
 
-  if (!pumpAuto) return;
+  if (sampleWaited) setPump(SAMPLE_PIN, sampleOn, sampleEnabled);  // always on unless sampleoff
+
+  if (!pumpAuto || !pumpWaited) return;
   // ec_low means EC is below the ADC floor -> definitely under target, keep running
   bool ecOk = !ecBelowRange && !isnan(ecValue) && ecValue >= EC_MIN && ecValue <= EC_MAX;
   bool phOk = ph >= PH_MIN && ph <= PH_MAX;
@@ -510,6 +527,8 @@ void setup()
   Serial.println();
   Serial.println("# Hydro ESP32 ready");
   printStatus();
+  Serial.printf("# Start delay: sampling pump in %lu s, Pump A/B in %lu s\n",
+                SAMPLE_START_DELAY / 1000, PUMP_START_DELAY / 1000);
   Serial.println("# Commands: enterec calec exitec | ph7 ph4 phreset | tankempty tankfull tankreset | pumpaon pumpaoff pumpbon pumpboff pumpauto | sampleon sampleoff | status | debug");
 }
 

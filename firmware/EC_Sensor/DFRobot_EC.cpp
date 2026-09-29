@@ -211,12 +211,13 @@ void DFRobot_EC::ecCalibration(byte mode)
         case 3:
         if(enterCalibrationFlag){
                 Serial.println();
-                if(ecCalibrationFinish){   
-                    if((this->_rawEC>0.9)&&(this->_rawEC<1.9)){
-                        EEPROM_write(KVALUEADDR, this->_kvalueLow);
-                    }else if((this->_rawEC>9)&&(this->_rawEC<16.8)){
-                        EEPROM_write(KVALUEADDR+4, this->_kvalueHigh);
-                    }
+                if(ecCalibrationFinish){
+                    // Patched: save both K values (the one not captured this session still holds
+                    // its stored value) and commit - on the ESP32, EEPROM.write() only changes the
+                    // copy in RAM, so without commit() the calibration was lost at the next reset.
+                    EEPROM_write(KVALUEADDR, this->_kvalueLow);
+                    EEPROM_write(KVALUEADDR+4, this->_kvalueHigh);
+                    EEPROM.commit();
                     Serial.print(F(">>>Calibration Successful"));
                 }else{
                     Serial.print(F(">>>Calibration Failed"));

@@ -288,7 +288,7 @@ void handleCommand(char* cmd)
   for (char* p = cmd; *p; p++) *p = toupper((unsigned char)*p);
 
   if (!strcmp(cmd, "ENTEREC") || !strcmp(cmd, "CALEC") || !strcmp(cmd, "EXITEC")) {
-    ec.calibration(ecVoltage, waterTemp, cmd);
+    ec.calibration(ecVoltage, waterTemp, cmd);        // patched library commits on exitec
 
   } else if (!strcmp(cmd, "PH7")) {
     float po = readPhPo();

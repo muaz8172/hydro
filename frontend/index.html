@@ -3,33 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hydro Dashboard</title>
+<title>Hydroponic System Monitoring</title>
 <meta name="description" content="Live plant camera, sensor readings, history and calibration for the lettuce hydroponic rack.">
-<!-- Offline: no CDNs. mqtt.js and uPlot are vendored in ./vendor -->
+<!-- Offline: no CDNs. mqtt.js, uPlot and the fonts (DM Sans, Fraunces; SIL OFL) are vendored in ./vendor -->
 <script src="vendor/mqtt.min.js"></script>
 <script src="vendor/uPlot.iife.min.js"></script>
 <link rel="stylesheet" href="vendor/uPlot.min.css">
 <style>
+  @font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400 700; font-display: swap; src: url(vendor/fonts/dm-sans-latin.woff2) format("woff2"); }
+  @font-face { font-family: "Fraunces"; font-style: normal; font-weight: 400 600; font-display: swap; src: url(vendor/fonts/fraunces-latin.woff2) format("woff2"); }
   :root {
-    --bg: #f6f5f1;
+    --bg: #f7f6f3;
     --card: #ffffff;
-    --sunk: #efeee8;
-    --line: #e4e2da;
-    --line-strong: #d4d1c7;
-    --text: #1b1d19;
-    --muted: #595e54;
-    --faint: #6c7166;
-    --good: #1d7f46;
-    --warn: #9a5b00;
-    --bad: #b42318;
-    --active: #2f6bb8;
-    --active-soft: #e6eefa;
-    --band: rgba(74, 115, 39, 0.28);
+    --sunk: #f7f6f3;
+    --line: #eaeaea;
+    --line-strong: #dcdad4;
+    --text: #2f3437;
+    --ink: #111111;
+    --muted: #787774;
+    --faint: #8f8e8a;
+    --good: #346538;   --good-bg: #edf3ec;
+    --warn: #956400;   --warn-bg: #fbf3db;
+    --bad: #9f2f2d;    --bad-bg: #fdebec;
+    --active: #1f6c9f; --active-bg: #e1f3fe;
+    --band: #c9d8c6;
     --st-seed: #d6e8bd;
     --st-veg: #8fbf5c;
     --st-mat: #3f6a22;
-    --radius: 14px;
+    /* one colour per sensor, shared by the overview graph and the Graphs tab */
+    --c-ph: #8b6fd6;
+    --c-ec: #3fa9e6;
+    --c-temp: #e8894a;
+    --c-hum: #2fa88f;
+    --c-level: #5b7fd6;
+    --radius: 10px;
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --sans: "DM Sans", system-ui, sans-serif;
+    --serif: "Fraunces", Georgia, serif;
+    --c-canopy: #3f6a22;
+    --c-yellow: #d4a72c;
+    --c-green: #6aae5a;
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", "DejaVu Sans Mono", monospace;
   }
   * { box-sizing: border-box; }
@@ -39,232 +52,257 @@
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, sans-serif;
+    font: 14px/1.5 var(--sans);
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
   }
-  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  code { font-family: var(--mono); font-size: 0.92em; background: var(--sunk); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; }
+  .num { font-variant-numeric: tabular-nums; }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
 
   .page {
     height: 100vh;
-    display: flex; flex-direction: column; gap: 16px;
-    padding: 20px 24px 24px;
+    display: flex; flex-direction: column; gap: 20px;
+    padding: 24px 32px;
   }
   header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 10px; }
-  .brand b { font-size: 18px; }
-  .brand span { color: var(--muted); }
-  .conn { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+  .brand { display: flex; align-items: center; gap: 12px; font: 600 22px/1 var(--serif); letter-spacing: -0.02em; color: var(--ink); }
+  .brand svg { flex-shrink: 0; }
+  .conns { display: flex; gap: 8px; }
+  .conn { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: 12.5px; color: var(--text); cursor: default; }
+  .conn b { font-weight: 700; color: var(--muted); }
+  .conn b.ok { color: var(--good); }
+  .conn b.bad { color: var(--bad); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex-shrink: 0; }
   .dot.ok { background: var(--good); }
   .dot.bad { background: var(--bad); }
 
-  /* segmented control (tabs, ranges) with a sliding pill */
-  .seg { position: relative; display: inline-flex; padding: 3px; background: var(--sunk); border: 1px solid var(--line); border-radius: 11px; }
+  /* segmented control (tabs, ranges) with a sliding dark pill */
+  .seg { position: relative; display: inline-flex; gap: 4px; padding: 3px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
   .seg button {
-    position: relative; z-index: 1; min-height: 38px; padding: 0 18px; border: 0; background: none;
-    font: 500 14px system-ui, sans-serif; color: var(--muted); border-radius: 8px; cursor: pointer;
+    position: relative; z-index: 1; min-height: 36px; padding: 0 16px; border: 0; background: none;
+    font: 500 13px var(--sans); color: var(--muted); border-radius: 6px; cursor: pointer;
     transition: color 150ms ease;
   }
-  .seg button:hover { background: none; }
+  .seg button:hover { background: none; color: var(--ink); }
   .seg button:active { transform: none; }
-  .seg button[aria-selected="true"] { color: var(--text); }
+  .seg button[aria-selected="true"] { color: #fff; }
   .seg .ind {
-    position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 0; border-radius: 8px;
-    background: var(--card); border: 1px solid var(--line-strong);
+    position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 0; border-radius: 6px;
+    background: var(--ink);
     transition: transform 200ms var(--ease-out), width 200ms var(--ease-out);
   }
-  .seg.small button { min-height: 32px; padding: 0 13px; font-size: 13px; }
-
-  .view { flex: 1; min-height: 0; }
-  main {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-    gap: 16px;
-  }
-  .left { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; gap: 16px; min-height: 0; }
+  .seg.small button { min-height: 30px; padding: 0 12px; font-size: 12.5px; }
 
   .card {
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 16px 18px;
+    padding: 14px 16px;
     min-width: 0;
   }
-  h2 { margin: 0; font-size: 15px; font-weight: 600; }
-  .sub { font-size: 12.5px; color: var(--faint); }
+  h2 { margin: 0; font-size: 14px; font-weight: 500; color: var(--ink); }
+  .sub { font-size: 12px; color: var(--muted); }
+  .label { font-size: 12px; color: var(--muted); }
 
-  /* sensor tiles */
-  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 16px; min-height: 0; }
-  .tile { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
-  .tile.link { cursor: pointer; }
-  .tile .top { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
-  .tile .top .num { font-size: 11.5px; color: var(--faint); }
-  .value { font-size: clamp(34px, 3.4vw, 56px); font-weight: 500; line-height: 1; letter-spacing: -0.02em; }
-  .value small { font: 400 14px system-ui, sans-serif; color: var(--muted); margin-left: 5px; letter-spacing: 0; }
-  .meter { position: relative; height: 14px; }
-  .meter .track { position: absolute; left: 0; right: 0; top: 5px; height: 4px; border-radius: 2px; background: var(--line); }
-  .meter .band { position: absolute; top: 5px; height: 4px; border-radius: 2px; background: var(--band); }
-  .meter .mark { position: absolute; top: 1px; width: 2.5px; height: 12px; border-radius: 1px; background: var(--text); transform: translateX(-50%); }
-  .status { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--faint); min-height: 18px; }
-  .status svg { flex-shrink: 0; }
-  .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
-  .stale { opacity: 0.45; filter: grayscale(1); }
-
-  /* pumps */
-  .pumps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-  .pump { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
-  .pump .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .pill {
-    display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px;
-    border-radius: 999px; font: 600 12.5px var(--mono); letter-spacing: 0.06em;
-    border: 1.5px solid var(--line-strong); color: var(--muted); background: var(--card);
-    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  /* small uppercase status tags */
+  .badge {
+    display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 9999px;
+    font: 600 10.5px var(--sans); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+    background: var(--sunk); color: var(--muted);
   }
-  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; box-sizing: border-box; }
-  .pill.on { background: var(--active); border-color: var(--active); color: #fff; }
-  .pill.on::before { background: #fff; border-color: #fff; }
-  .pill.mode { background: var(--text); border-color: var(--text); color: #fff; }
-  .pill.mode::before { display: none; }
-  .pill.unknown { border-style: dashed; }
-  .pill.unknown::before { display: none; }
+  .badge.good { background: var(--good-bg); color: var(--good); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.bad  { background: var(--bad-bg);  color: var(--bad); }
 
-  /* data card */
-  .raw { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 24px; font-size: 13px; }
-  .raw div { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--line); }
-  .raw span:first-child { color: var(--muted); }
+  /* ---------- overview ---------- */
+  .view { flex: 1; min-height: 0; }
+  main { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 16px; }
+  .right { display: flex; flex-direction: column; gap: 16px; min-height: 0; min-width: 0; }
 
-  /* camera */
-  .camera { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
-  .camera .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  /* camera: a square frame showing the centre crop, the same 1:1 view vision.py gives the
+     stage model (dataset/lettuce_224 is all 224x224); as large as the screen allows */
+  .camera { display: flex; flex-direction: column; gap: 16px; min-height: 0; padding: 16px; }
   .photo {
-    position: relative; flex: 1; min-height: 0;
-    border-radius: 12px; overflow: hidden;
-    background: #ecebe5; border: 1px solid var(--line);
+    position: relative; flex-shrink: 0;
+    width: min(calc(100vh - 218px), calc(100vw - 640px));
+    aspect-ratio: 1 / 1;
+    border-radius: 6px; overflow: hidden; background: #efeeea;
     display: flex; align-items: center; justify-content: center;
   }
-  .photo img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .photo .empty { color: var(--faint); font-size: 14px; text-align: center; padding: 24px; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo .empty { color: var(--muted); font-size: 13px; }
   .photo .stamp {
     position: absolute; left: 12px; bottom: 12px;
-    padding: 5px 10px; border-radius: 8px;
-    background: rgba(27, 29, 25, 0.72); color: #fff; font: 12px var(--mono);
+    padding: 4px 8px; border-radius: 4px;
+    background: rgba(17, 17, 17, 0.6); color: #fff; font: 11.5px var(--sans);
   }
-  .verdict { display: flex; align-items: center; gap: 10px; }
-  .verdict b { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
-  .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  .fact { display: flex; flex-direction: column; gap: 2px; }
-  .fact span { font-size: 12.5px; color: var(--muted); }
-  .fact .num { font-size: 20px; }
-  .fact .big { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .fact .big.muted { color: var(--faint); font-weight: 500; }
-  .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
-  .reasons { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); min-height: 18px; }
-  .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .verdict { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; min-height: 0; }
+  .vrow { display: flex; align-items: center; gap: 28px; }
+  .vrow .stage { flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .vrow .stage b { font: 400 28px/1 var(--serif); letter-spacing: -0.03em; color: var(--ink); white-space: nowrap; }
+  .vrow .stage b.muted { color: var(--faint); }
+  .fact { display: flex; flex-direction: column; gap: 3px; font: 17px var(--sans); color: var(--ink); }
+  .fact span { font: 11.5px var(--sans); color: var(--muted); }
+  .fact b { font-weight: 400; }
+  .reasons { margin: 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--muted); }
+  .reasons:empty { display: none; }
+
   button, .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-    min-height: 40px; padding: 0 16px; border-radius: 10px; text-decoration: none;
-    font: 500 14px system-ui, sans-serif; color: var(--text);
-    background: #f1f0eb; border: 1px solid var(--line-strong); cursor: pointer;
+    min-height: 36px; padding: 0 14px; border-radius: 6px; text-decoration: none;
+    font: 500 13px var(--sans); color: var(--text);
+    background: var(--card); border: 1px solid var(--line); cursor: pointer;
     transition: transform 120ms ease, background-color 150ms ease;
   }
-  button:hover, .btn:hover { background: #e9e7e0; }
-  button:active, .btn:active { transform: scale(0.97); }
+  button:hover, .btn:hover { background: var(--sunk); }
+  button:active, .btn:active { transform: scale(0.98); }
   button:focus-visible, .btn:focus-visible { outline: 2px solid var(--active); outline-offset: 2px; }
   button:disabled { opacity: 0.5; cursor: default; }
   button:disabled:active { transform: none; }
-  button.primary { background: var(--text); color: #fff; border-color: var(--text); }
-  button.primary:hover:not(:disabled) { background: #33362f; }
+  button.primary, .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); min-height: 40px; padding: 0 18px; }
+  button.primary:hover:not(:disabled), .btn.primary:hover { background: #333; }
+
+  /* sensor tiles */
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .tile { display: flex; flex-direction: column; gap: 10px; cursor: pointer; text-align: left; transition: border-color 150ms ease; }
+  button.tile { align-items: stretch; justify-content: flex-start; min-height: 0; font: inherit; color: inherit; background: var(--card); border-radius: var(--radius); }
+  button.tile:hover { background: var(--card); border-color: var(--line-strong); }
+  button.tile:active { transform: none; }
+  .tile[aria-pressed="true"] { border-color: var(--ink); }
+  .tile .top { display: flex; justify-content: space-between; align-items: center; min-height: 20px; font-size: 13px; color: var(--muted); }
+  .tile .top .dot { width: 6px; height: 6px; }
+  .value { font: 30px/1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
+  .value small { font: 13px var(--sans); color: var(--muted); margin-left: 6px; letter-spacing: 0; }
+  .value.word { font: 26px/1 var(--serif); letter-spacing: -0.02em; }
+  .meter { position: relative; height: 3px; border-radius: 2px; background: var(--line); }
+  .meter .band { position: absolute; top: 0; bottom: 0; background: var(--band); }
+  .meter .mark { position: absolute; top: -4px; width: 2px; height: 11px; background: var(--ink); transform: translateX(-50%); }
+  .meter .mark.warn { background: var(--warn); }
+  .meter .mark.bad { background: var(--bad); }
+  .tile .foot { font-size: 11.5px; line-height: 1; color: var(--muted); }
+  .stale { opacity: 0.45; filter: grayscale(1); }
+
+  /* pumps: one card, a row per pump */
+  .pumps { padding: 4px 16px; display: flex; flex-direction: column; }
+  .pump { min-height: 40px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); cursor: default; }
+  .pump + .pump { border-top: 1px solid var(--line); }
+  .pill {
+    display: inline-flex; align-items: center; height: 22px; padding: 0 10px;
+    border-radius: 9999px; font: 600 10.5px var(--sans); letter-spacing: 0.08em;
+    border: 1px solid var(--line); color: var(--muted); background: var(--sunk);
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+  .pill.on { background: var(--active-bg); border-color: var(--active-bg); color: var(--active); }
+  .pill.unknown { border-style: dashed; background: none; }
+
+  /* plant vision: three measures from the photo, each with a bar */
+  .vision { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px; }
+  .vision .hd { display: flex; justify-content: space-between; align-items: baseline; }
+  .vision .cols { display: flex; gap: 20px; }
+  .vcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .vcol + .vcol { border-left: 1px solid var(--line); padding-left: 20px; }
+  .vcol .lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .vcol .lbl i { width: 9px; height: 9px; border-radius: 2px; }
+  .vcol .v { font-size: 30px; line-height: 1; letter-spacing: -0.02em; color: var(--ink); }
+  .vcol .v small { font-size: 13px; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+  .vcol .bar { height: 4px; border-radius: 2px; background: #f0efeb; overflow: hidden; }
+  .vcol .bar i { display: block; height: 100%; width: 0; border-radius: 2px; transition: width 300ms var(--ease-out); }
+  .vcol .note { font-size: 11.5px; color: var(--muted); min-height: 17px; }
+
+  /* overview graph */
+  .mini { flex: 1; min-height: 110px; display: flex; flex-direction: column; padding: 12px 16px 6px; cursor: pointer; }
 
   /* ---------- graphs ---------- */
-  #v-graphs { display: flex; flex-direction: column; gap: 14px; }
+  #v-graphs { display: flex; flex-direction: column; gap: 16px; }
   .gtool { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .gtool > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .charts { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 14px; }
-  .chart { display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 12px 14px 8px; }
-  .chart .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-  .chart .rd { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; }
-  .chart .rd small { color: var(--faint); font-weight: 400; margin-right: 8px; font-size: 12px; }
+  .gtool > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .charts { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .chart { display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 14px 16px 6px; }
+  .chart .hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .chart .hd h2 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; color: var(--muted); }
+  .chart .rd { font: 12.5px var(--sans); color: var(--ink); }
+  .chart .rd small { color: var(--muted); margin-right: 8px; font-size: 11px; }
   .plot { flex: 1; min-height: 0; position: relative; }
   .plot .uplot { position: absolute; inset: 0; }
-  .tablewrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+  .swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+  .tablewrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { padding: 7px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  th { position: sticky; top: 0; background: var(--sunk); font-weight: 600; color: var(--muted); }
+  th { position: sticky; top: 0; background: var(--card); font-weight: 500; color: var(--muted); }
   th:first-child, td:first-child { text-align: left; }
-  td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  .lanes-card { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; }
-  .lanes { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 7px 14px; align-items: center; font-size: 13px; }
-  .lanes .lb { color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
-  .lanes .lb .num { font-size: 11.5px; color: var(--faint); }
-  .lane { position: relative; height: 18px; border-radius: 4px; background: var(--sunk); overflow: hidden; }
+  td { font-variant-numeric: tabular-nums; }
+  .lanes-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+  .lanes { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 16px; align-items: center; font-size: 12.5px; }
+  .lanes .lb { color: var(--muted); cursor: default; }
+  .lane { position: relative; height: 14px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
   .lane svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .lane .xh { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--text); opacity: 0.6; }
-  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+  .lane .xh { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ink); opacity: 0.6; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-left: 126px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .hatch { background: repeating-linear-gradient(45deg, #c9c6bc 0 2px, var(--sunk) 2px 5px); }
-  .msg { font-size: 13px; color: var(--muted); }
+  .hatch { background: repeating-linear-gradient(45deg, #d5d3cc 0 2px, var(--sunk) 2px 5px); }
+  .msg { font-size: 12.5px; color: var(--bad); }
 
   /* ---------- calibration ---------- */
-  #v-calibration { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; }
+  #v-calibration { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 16px; }
   .cal-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
   .pick {
-    display: flex; flex-direction: column; align-items: stretch; gap: 4px; text-align: left; width: 100%;
-    min-height: 0; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; width: 100%;
+    min-height: 0; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
     font: inherit; color: inherit;
   }
   .pick:hover { background: var(--card); border-color: var(--line-strong); }
-  .pick[aria-pressed="true"] { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+  .pick[aria-pressed="true"] { border-color: var(--ink); }
   .pick .row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-  .pick b { font-size: 15px; }
-  .stored { font: 12px/1.6 var(--mono); color: var(--muted); background: var(--sunk); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 44px; }
+  .pick b { font-size: 14px; font-weight: 500; color: var(--ink); }
+  .stored { font: 12px/1.6 var(--mono); color: var(--muted); background: var(--sunk); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 44px; }
   .hold { position: relative; overflow: hidden; }
   .hold .fill { position: absolute; inset: 0; background: var(--bad); clip-path: inset(0 100% 0 0); transition: clip-path 200ms ease-out; pointer-events: none; }
   .hold.holding .fill { clip-path: inset(0 0 0 0); transition: clip-path 2s linear; }
   .hold .lbl { position: relative; }
   .hold.holding .lbl { color: #fff; }
 
-  .wiz { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: auto; }
+  .wiz { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: auto; padding: 20px 24px; }
   .steps { display: flex; gap: 6px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
-  .steps li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--sunk); }
-  .steps li .n { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 600 12px var(--mono); border: 1.5px solid var(--line-strong); background: var(--card); }
-  .steps li.cur { color: var(--text); background: var(--card); box-shadow: inset 0 0 0 1px var(--line-strong); }
-  .steps li.cur .n { border-color: var(--text); }
-  .steps li.done { color: var(--good); }
+  .steps li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--faint); padding: 5px 12px 5px 5px; border-radius: 9999px; background: var(--sunk); }
+  .steps li .n { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 600 11px var(--sans); border: 1px solid var(--line-strong); background: var(--card); }
+  .steps li.cur { color: var(--ink); background: var(--card); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .steps li.cur .n { border-color: var(--ink); }
+  .steps li.done { color: var(--good); background: var(--good-bg); }
   .steps li.done .n { background: var(--good); border-color: var(--good); color: #fff; }
-  .stepbody { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px; }
+  .stepbody { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; }
   .instr { display: flex; flex-direction: column; gap: 12px; }
-  .instr h3 { margin: 0; font-size: 21px; letter-spacing: -0.01em; }
+  .instr h3 { margin: 0; font: 400 24px/1.15 var(--serif); letter-spacing: -0.02em; color: var(--ink); }
   .instr ol { margin: 0; padding-left: 20px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
-  .readout { display: flex; flex-direction: column; gap: 10px; background: var(--sunk); border-radius: 12px; padding: 14px 16px; }
-  .readout .big { font: 500 48px/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-  .readout .big small { font: 400 15px system-ui, sans-serif; color: var(--muted); margin-left: 6px; }
+  .readout { display: flex; flex-direction: column; gap: 10px; background: var(--sunk); border-radius: 8px; padding: 14px 16px; }
+  .readout .big { font: 44px/1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
+  .readout .big small { font: 14px var(--sans); color: var(--muted); margin-left: 6px; }
   .spark { height: 46px; }
   .spark svg { width: 100%; height: 100%; display: block; overflow: visible; }
-  .gate .track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-bottom: 6px; }
-  .gate .track i { display: block; height: 100%; width: 0; background: var(--warn); border-radius: 3px; transition: width 300ms ease, background-color 200ms ease; }
+  .status { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--muted); min-height: 18px; }
+  .status svg { flex-shrink: 0; }
+  .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .gate .track { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-bottom: 6px; }
+  .gate .track i { display: block; height: 100%; width: 0; background: var(--warn); border-radius: 2px; transition: width 300ms ease, background-color 200ms ease; }
   .gate.ok .track i { background: var(--good); }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .replies { font: 12.5px/1.6 var(--mono); background: #1d201b; color: #d9dccf; border-radius: 10px; padding: 10px 12px; min-height: 110px; max-height: 240px; overflow: auto; }
+  .replies { font: 12px/1.6 var(--mono); background: #1d1f20; color: #d6d6d2; border-radius: 8px; padding: 10px 12px; min-height: 110px; max-height: 240px; overflow: auto; }
   .replies div { white-space: pre-wrap; overflow-wrap: anywhere; }
   .replies .me { color: #9fc3ec; }
-  .replies .tm { color: #8a8f80; margin-right: 8px; }
-  .notice { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13.5px; padding: 10px 12px; border-radius: 10px; background: #fbf3e6; color: var(--warn); }
-  .notice.bad { background: #fbeceb; color: var(--bad); }
-  .notice.good { background: #e8f3ec; color: var(--good); }
+  .replies .tm { color: #8a8a86; margin-right: 8px; }
+  .notice { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; padding: 10px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); }
+  .notice.bad { background: var(--bad-bg); color: var(--bad); }
+  .notice.good { background: var(--good-bg); color: var(--good); }
 
   @media (max-width: 1100px) {
     .page { height: auto; min-height: 100vh; padding: 16px; }
     main { grid-template-columns: minmax(0, 1fr); }
-    .photo { min-height: 260px; aspect-ratio: 4 / 3; flex: none; }
-    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
-    .pumps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .raw { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .photo { width: 100%; }
+    .mini { min-height: 180px; }
     .charts { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: 240px; }
     .tablewrap { max-height: 70vh; }
     #v-calibration { grid-template-columns: minmax(0, 1fr); }
     .stepbody { grid-template-columns: minmax(0, 1fr); }
-    .lanes { grid-template-columns: 120px minmax(0, 1fr); }
+    .vrow { gap: 20px; flex-wrap: wrap; }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
@@ -274,115 +312,95 @@
 <body>
 <div class="page">
   <header>
-    <div class="brand">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4a7327" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 21V10"/><path d="M12 13c-4 0-7-3-7-8 4 0 7 3 7 8z"/><path d="M12 11c0-4 3-7 7-7 0 4-3 7-7 7z"/></svg>
-      <b>Hydro</b><span>· Lettuce rack</span>
-    </div>
+    <div class="brand"><svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 28.5c-6.6 0-11.5-4.1-11.5-9.6 0-2.3 1-4.2 2.5-5.5-.3-4.8 3.6-8.9 9-8.9s9.3 4.1 9 8.9c1.5 1.3 2.5 3.2 2.5 5.5 0 5.5-4.9 9.6-11.5 9.6z" fill="#edf3ec" stroke="#346538" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 13.4c2.2 1.2 3.6 3 4.2 5.6M25 13.4c-2.2 1.2-3.6 3-4.2 5.6" fill="none" stroke="#8fbf5c" stroke-width="1.4" stroke-linecap="round"/><path d="M16 27.5V11M16 17.5l-3.6-3.4M16 21l4-3.8M16 14l2.6-2.4" fill="none" stroke="#346538" stroke-width="1.4" stroke-linecap="round"/></svg>Hydroponic System Monitoring</div>
     <div class="seg" role="tablist" aria-label="Dashboard pages" id="tabs">
       <span class="ind" aria-hidden="true"></span>
-      <button type="button" role="tab" id="tab-overview" aria-controls="v-overview" aria-selected="true">Overview</button>
-      <button type="button" role="tab" id="tab-graphs" aria-controls="v-graphs" aria-selected="false">Graphs</button>
+      <button type="button" role="tab" id="tab-overview" aria-controls="v-overview" aria-selected="true">Live Monitoring</button>
+      <button type="button" role="tab" id="tab-graphs" aria-controls="v-graphs" aria-selected="false">Sensor History</button>
       <button type="button" role="tab" id="tab-calibration" aria-controls="v-calibration" aria-selected="false">Calibration</button>
     </div>
-    <div style="display:flex; gap:20px; flex-wrap:wrap;">
-      <span class="conn"><span class="dot" id="dot-mqtt"></span><span id="txt-mqtt">Connecting…</span></span>
-      <span class="conn"><span class="dot" id="dot-esp"></span><span id="txt-esp">ESP32: waiting</span></span>
-      <span class="conn"><span class="dot" id="dot-cam"></span><span id="txt-cam">Camera: waiting</span></span>
+    <div class="conns" aria-label="Connections">
+      <span class="conn" id="conn-mqtt" title="Connecting…"><span class="dot" id="dot-mqtt"></span>Live</span>
+      <span class="conn" id="conn-esp" title="ESP32: waiting">ESP32<b id="st-esp">Waiting</b></span>
+      <span class="conn" id="conn-cam" title="Camera: waiting">Camera<b id="st-cam">Waiting</b></span>
     </div>
   </header>
 
   <!-- ======================= OVERVIEW ======================= -->
   <main class="view" id="v-overview" role="tabpanel" aria-labelledby="tab-overview">
-    <div class="left">
-      <section class="tiles" aria-label="Sensor readings" id="tiles"></section>
-      <section class="pumps" aria-label="Pumps" id="pumps"></section>
-      <section class="card" aria-label="Raw values">
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-          <h2>Latest reading</h2><span class="sub num" id="raw-meta">—</span>
-        </div>
-        <div class="raw" id="raw"></div>
-      </section>
-    </div>
-
     <section class="card camera" aria-label="Plant camera">
-      <div class="head">
-        <h2>Plant camera</h2>
-        <span class="sub">MaixCAM · live every 10 s · colour check + stage model</span>
-      </div>
       <div class="photo" id="photo">
-        <div class="empty" id="photo-empty">Waiting for the first photo…<br><span class="sub">Is <span class="num">vision.py</span> running?</span></div>
+        <div class="empty" id="photo-empty">Waiting for the first photo…</div>
         <img id="photo-img" alt="Latest photo of the lettuce from the plant camera" hidden>
         <span class="stamp" id="photo-stamp" hidden></span>
       </div>
-      <div class="verdict" id="verdict"><b>—</b></div>
-      <div class="facts">
-        <div class="fact"><span>Growth stage</span><b class="big muted" id="f-stage">—</b></div>
-        <div class="fact"><span>Size</span><b class="big muted" id="f-size">—</b></div>
-        <div class="fact"><span>Model confidence</span><b class="num" id="f-conf">—</b></div>
-      </div>
-      <div class="facts">
-        <div class="fact"><span>Plant in view</span><b class="num" id="f-canopy">—</b></div>
-        <div class="fact"><span>Yellow / brown leaf</span><b class="num" id="f-yellow">—</b></div>
-        <div class="fact"><span>Greenness</span><b class="num" id="f-green">—</b></div>
-      </div>
-      <ul class="reasons" id="reasons"></ul>
-      <div class="foot">
-        <span class="sub" id="saved">Saved to disk every 15 min</span>
-        <button type="button" id="snap" disabled>Save photo now</button>
+      <div class="verdict">
+        <div class="vrow">
+          <div class="stage"><span class="badge" id="verdict">—</span><b class="muted" id="f-stage">—</b></div>
+          <div class="fact"><span>Size</span><b id="f-size">—</b></div>
+          <div class="fact"><span>Confidence</span><b id="f-conf">—</b></div>
+          <button type="button" class="primary" id="snap" disabled title="Photos are also saved every 15 min">Save photo</button>
+        </div>
+        <ul class="reasons" id="reasons"></ul>
       </div>
     </section>
+
+    <div class="right">
+      <section class="tiles" aria-label="Sensor readings" id="tiles"></section>
+      <section class="card pumps" aria-label="Pumps" id="pumps"></section>
+      <section class="card vision" aria-label="Plant vision">
+        <div class="hd"><h2>Plant vision</h2><span class="sub" id="pv-time"></span></div>
+        <div class="cols">
+          <div class="vcol"><span class="lbl"><i style="background:var(--c-canopy)"></i>Canopy</span><span class="v" id="f-canopy">—<small>%</small></span><span class="bar"><i id="b-canopy" style="background:var(--c-canopy)"></i></span><span class="note" id="n-canopy"></span></div>
+          <div class="vcol"><span class="lbl"><i style="background:var(--c-yellow)"></i>Yellowing</span><span class="v" id="f-yellow">—<small>%</small></span><span class="bar"><i id="b-yellow" style="background:var(--c-yellow)"></i></span><span class="note" id="n-yellow"></span></div>
+          <div class="vcol"><span class="lbl"><i style="background:var(--c-green)"></i>Green index</span><span class="v" id="f-green">—</span><span class="bar"><i id="b-green" style="background:var(--c-green)"></i></span><span class="note">0 – 1</span></div>
+        </div>
+      </section>
+      <section class="card mini" aria-label="Last 24 hours" id="mini" title="Open Graphs"><div class="plot" id="mini-plot"></div></section>
+    </div>
   </main>
 
   <!-- ======================= GRAPHS ======================= -->
   <section class="view" id="v-graphs" role="tabpanel" aria-labelledby="tab-graphs" hidden>
     <div class="gtool">
-      <div>
-        <div class="seg small" role="tablist" aria-label="Time range" id="ranges">
-          <span class="ind" aria-hidden="true"></span>
-          <button type="button" role="tab" data-r="1h" aria-selected="false">1 h</button>
-          <button type="button" role="tab" data-r="24h" aria-selected="true">24 h</button>
-          <button type="button" role="tab" data-r="7d" aria-selected="false">7 d</button>
-        </div>
-        <span class="sub num" id="range-note"></span>
+      <div class="seg small" role="tablist" aria-label="Time range" id="ranges">
+        <span class="ind" aria-hidden="true"></span>
+        <button type="button" role="tab" data-r="1h" aria-selected="false">1 h</button>
+        <button type="button" role="tab" data-r="24h" aria-selected="true">24 h</button>
+        <button type="button" role="tab" data-r="7d" aria-selected="false">7 d</button>
       </div>
       <div>
         <span class="msg" id="g-msg"></span>
         <button type="button" id="btn-table" aria-pressed="false">Table</button>
-        <a class="btn" id="btn-csv" href="api/export.csv?range=24h" download>Download CSV</a>
+        <a class="btn primary" id="btn-csv" href="api/export.csv?range=24h" download>CSV</a>
       </div>
     </div>
     <div class="charts" id="charts"></div>
     <div class="tablewrap" id="table-area" hidden><table id="tbl"></table></div>
     <section class="card lanes-card" aria-label="Pumps and plant stage">
-      <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-        <h2>Pumps &amp; plant stage</h2>
-        <div class="legend">
-          <span><i class="swatch" style="background:var(--active)"></i>Pump ON</span>
-          <span><i class="swatch" style="background:var(--st-seed)"></i>Seedling · Small</span>
-          <span><i class="swatch" style="background:var(--st-veg)"></i>Vegetative · Medium</span>
-          <span><i class="swatch" style="background:var(--st-mat)"></i>Matured · Large</span>
-          <span><i class="swatch hatch"></i>Uncertain</span>
-        </div>
-      </div>
       <div class="lanes" id="lanes"></div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--st-seed)"></i>Seedling</span>
+        <span><i class="swatch" style="background:var(--st-veg)"></i>Vegetative</span>
+        <span><i class="swatch" style="background:var(--st-mat)"></i>Matured</span>
+        <span><i class="swatch hatch"></i>Uncertain</span>
+      </div>
     </section>
   </section>
 
   <!-- ======================= CALIBRATION ======================= -->
   <section class="view" id="v-calibration" role="tabpanel" aria-labelledby="tab-calibration" hidden>
     <div class="cal-list">
-      <button type="button" class="pick" data-w="ec" aria-pressed="true"><span class="row"><b>EC probe</b><span class="sub num">~5 min</span></span><span class="sub">Needs 1413 µS/cm and 12.88 mS/cm buffers</span></button>
-      <button type="button" class="pick" data-w="ph" aria-pressed="false"><span class="row"><b>pH probe</b><span class="sub num">~10 min</span></span><span class="sub">Needs pH 7 and pH 4 buffers</span></button>
-      <button type="button" class="pick" data-w="tank" aria-pressed="false"><span class="row"><b>Tank level</b><span class="sub num">~15 min</span></span><span class="sub">Drain to MIN, then fill to MAX</span></button>
+      <button type="button" class="pick" data-w="ec" aria-pressed="true"><span class="row"><b>EC probe</b><span class="sub num">~5 min</span></span><span class="sub">1413 µS/cm + 12.88 mS/cm buffers</span></button>
+      <button type="button" class="pick" data-w="ph" aria-pressed="false"><span class="row"><b>pH probe</b><span class="sub num">~10 min</span></span><span class="sub">pH 7 + pH 4 buffers</span></button>
+      <button type="button" class="pick" data-w="tank" aria-pressed="false"><span class="row"><b>Tank level</b><span class="sub num">~15 min</span></span><span class="sub">Drain to MIN, fill to MAX</span></button>
       <div class="card" style="display:flex; flex-direction:column; gap:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><h2>Stored calibration</h2><button type="button" id="btn-status" style="min-height:34px">Read from ESP32</button></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><h2>Stored calibration</h2><button type="button" id="btn-status" title="Sends status to the ESP32">Read</button></div>
         <div class="stored" id="stored">Not read yet.</div>
-        <div class="sub">The ESP32's reply to <code>status</code>.</div>
       </div>
-      <div class="card" style="display:flex; flex-direction:column; gap:8px;">
-        <h2>Reset</h2>
-        <div class="sub">Hold for 2 seconds. Sends <code>phreset</code>, which puts pH calibration back to the defaults.</div>
-        <button type="button" class="hold" id="hold-ph"><span class="fill"></span><span class="lbl">Hold to reset pH calibration</span></button>
+      <div class="card" style="display:flex; flex-direction:column; gap:10px;">
+        <h2>Reset pH</h2>
+        <button type="button" class="hold" id="hold-ph" title="Hold 2 s. Sends phreset: pH calibration back to defaults"><span class="fill"></span><span class="lbl">Hold to reset pH calibration</span></button>
       </div>
     </div>
     <section class="card wiz" aria-label="Calibration wizard" id="wiz"></section>
@@ -396,18 +414,17 @@ const CAM_STALE_MS = 30000;      // camera photo older than this -> "Camera: no 
 
 // Target bands (must match EC_MIN/EC_MAX/PH_MIN/PH_MAX/TEMP_MIN/TEMP_MAX in firmware/Full_code/Full_code.ino)
 const SENSORS = [
-  { key: "ph",        label: "pH",          unit: "",      band: [5.5, 6.5], scale: [4.5, 7.5], dec: 2 },
-  { key: "ec",        label: "EC",          unit: "mS/cm", band: [1.2, 1.8], scale: [0.6, 2.4], dec: 2 },
-  { key: "level_pct", label: "Water level", unit: "%",     band: [20, 100],  scale: [0, 100],   dec: 0 },
-  { key: "temp",      label: "Air temp",    unit: "°C",    band: [25, 36],   scale: [20, 40],   dec: 1 },
-  { key: "hum",       label: "Humidity",    unit: "%",     band: [50, 75],   scale: [30, 90],   dec: 1 },
+  { key: "ph",        label: "pH",       unit: "",      band: [5.5, 6.5], scale: [4.5, 7.5], dec: 2, raw: ["po_mv"] },
+  { key: "ec",        label: "EC",       unit: "mS/cm", band: [1.2, 1.8], scale: [0.6, 2.4], dec: 2, raw: ["ec_mv"] },
+  { key: "level_pct", label: "Water",    unit: "%",     band: [20, 100],  scale: [0, 100],   dec: 0, raw: ["dist_cm", "level"] },
+  { key: "temp",      label: "Air",      unit: "°C",    band: [25, 36],   scale: [20, 40],   dec: 1, raw: [] },
+  { key: "hum",       label: "Humidity", unit: "%",     band: [50, 75],   scale: [30, 90],   dec: 1, raw: [] },
 ];
 const PUMPS = [
   { key: "pump_a",      name: "Nutrient A", role: "Runs with B until EC/pH in target" },
   { key: "pump_b",      name: "Nutrient B", role: "Runs with A until EC/pH in target" },
   { key: "pump_sample", name: "Sampling",   role: "Always on" },
 ];
-const RAW = ["ec_mv", "po_mv", "dist_cm", "level", "log_id", "row"];
 const STAGES = {
   seedling:   { name: "Seedling",   size: "Small",  color: "var(--st-seed)" },
   vegetative: { name: "Vegetative", size: "Medium", color: "var(--st-veg)" },
@@ -432,7 +449,7 @@ function placeInd(seg) {
   const cur = seg.querySelector('[aria-selected="true"]'), ind = seg.querySelector(".ind");
   if (!cur || !ind || !cur.offsetWidth) return;
   ind.style.width = cur.offsetWidth + "px";
-  ind.style.transform = `translateX(${cur.offsetLeft - 3}px)`;
+  ind.style.transform = `translateX(${cur.offsetLeft}px)`;
 }
 function segSelect(seg, btn) {
   for (const b of seg.querySelectorAll('[role="tab"]')) b.setAttribute("aria-selected", b === btn ? "true" : "false");
@@ -446,6 +463,7 @@ function showTab(name) {
   segSelect($("tabs"), btn);
   for (const v of ["overview", "graphs", "calibration"]) $("v-" + v).hidden = v !== name;
   if (name === "graphs") { placeInd($("ranges")); loadGraphs(); }
+  if (name === "overview") loadMini();
   if (name === "calibration") calOpened();
   try { history.replaceState(null, "", "#" + name); } catch (e) {}
 }
@@ -459,50 +477,43 @@ $("tabs").addEventListener("keydown", (e) => {
 });
 
 // ---------- build static structure once ----------
+// Sensor tiles: label + status, value, meter. Details (target, raw values) live in the tooltip.
+// Clicking a tile picks which sensor the overview graph shows.
 const tileEls = {};
 for (const s of SENSORS) {
-  const t = el("div", "card tile link");
-  t.title = "Open the history for " + s.label;
+  const t = el("button", "card tile");
+  t.type = "button";
+  t.setAttribute("aria-pressed", "false");
   t.innerHTML = `
-    <div class="top"><span>${s.label}</span><span class="num">${s.band[0]}–${s.band[1]}</span></div>
-    <div class="value num">—<small>${s.unit}</small></div>
-    <div class="meter" aria-hidden="true"><div class="track"></div><div class="band"></div><div class="mark" hidden></div></div>
-    <div class="status">${ICON.dash}<span>No data</span></div>`;
-  t.addEventListener("click", () => showTab("graphs"));
+    <span class="top"><span>${s.label}</span><span class="flag"><i class="dot"></i></span></span>
+    <span class="value">—<small>${s.unit === "mS/cm" ? "mS" : s.unit}</small></span>
+    <span class="meter" aria-hidden="true"><span class="band"></span><span class="mark" hidden></span></span>`;
+  t.addEventListener("click", () => setMini(s.key));
   const [lo, hi] = s.scale;
   const pct = (v) => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
   const band = t.querySelector(".band");
   band.style.left = pct(s.band[0]) + "%";
   band.style.width = (pct(s.band[1]) - pct(s.band[0])) + "%";
-  tileEls[s.key] = { root: t, value: t.querySelector(".value"), mark: t.querySelector(".mark"), status: t.querySelector(".status"), pct };
+  tileEls[s.key] = { root: t, value: t.querySelector(".value"), mark: t.querySelector(".mark"), flag: t.querySelector(".flag"), pct, s };
+  t.title = `${s.label} · target ${s.band[0]}–${s.band[1]} ${s.unit}`.trim();
   $("tiles").appendChild(t);
 }
-// sixth tile slot: pump mode
-const modeCard = el("div", "card pump");
-modeCard.innerHTML = `<div class="row"><h2>Pump mode</h2><span class="pill unknown" id="mode-pill">—</span></div>
-  <div class="sub">A + B stop at EC 1.2–1.8 · pH 5.5–6.5</div>
-  <div class="status" id="tank-status">${ICON.dash}<span>Tank: no data</span></div>`;
+// sixth tile: pump mode + tank
+const modeCard = el("div", "card tile");
+modeCard.style.cursor = "default";
+modeCard.title = "A + B stop at EC 1.2–1.8 · pH 5.5–6.5";
+modeCard.innerHTML = `<span class="top"><span>Pump mode</span></span>
+  <span class="value word" id="mode-val">—</span>
+  <span class="foot" id="tank-status">Tank —</span>`;
 $("tiles").appendChild(modeCard);
 
 const pumpEls = {};
 for (const p of PUMPS) {
-  const c = el("div", "card pump");
-  c.innerHTML = `<div class="row"><div><h2>${p.name}</h2><div class="sub">${p.role}</div></div><span class="pill unknown">—</span></div>
-    <div class="sub num since">No status yet</div>`;
-  pumpEls[p.key] = { pill: c.querySelector(".pill"), since: c.querySelector(".since"), on: null, t: 0 };
-  $("pumps").appendChild(c);
-}
-// fourth pump slot: session info
-const infoCard = el("div", "card pump");
-infoCard.innerHTML = `<div class="row"><div><h2>Session</h2><div class="sub">bridge.py CSV log</div></div></div>
-  <div class="sub num" id="session">—</div>`;
-$("pumps").appendChild(infoCard);
-
-const rawEls = {};
-for (const k of RAW) {
-  const d = el("div", null, `<span>${k}</span><span class="num">—</span>`);
-  rawEls[k] = d.lastChild;
-  $("raw").appendChild(d);
+  const row = el("div", "pump");
+  row.innerHTML = `<span>${p.name}</span><span class="pill unknown">—</span>`;
+  row.title = p.role;
+  pumpEls[p.key] = { row, pill: row.querySelector(".pill"), role: p.role, on: null, t: 0 };
+  $("pumps").appendChild(row);
 }
 
 // ---------- helpers ----------
@@ -518,13 +529,25 @@ function setStatus(node, cls, icon, text) {
   node.innerHTML = ICON[icon] + "<span></span>";
   node.lastChild.textContent = text;
 }
+// header cards: Live shows a dot, ESP32 and Camera a coloured word; the detail goes in the tooltip
+const CONN_WORD = { esp: { ok: "Connected", bad: "Disconnected" }, cam: { ok: "Connected", bad: "Offline" } };
 function setDot(id, state, text) {
-  $("dot-" + id).className = "dot " + (state || "");
-  $("txt-" + id).textContent = text;
+  const dot = $("dot-" + id), word = $("st-" + id);
+  if (dot) dot.className = "dot " + (state || "");
+  if (word) { word.className = state || ""; word.textContent = CONN_WORD[id][state] || "Waiting"; }
+  $("conn-" + id).title = text;
+}
+// tile flag: a green dot when fine, otherwise a short tag
+function setFlag(t, cls, tag, text) {
+  if (cls === "good") t.flag.innerHTML = '<i class="dot ok"></i>';
+  else if (!tag) t.flag.innerHTML = '<i class="dot"></i>';
+  else { t.flag.innerHTML = `<span class="badge ${cls}"></span>`; t.flag.firstChild.textContent = tag; }
+  t.mark.className = "mark" + (cls === "warn" || cls === "bad" ? " " + cls : "");
+  t.status = text;
 }
 
 // ---------- sensors ----------
-let lastSensorAt = 0;
+let lastSensorAt = 0, sessionText = "";
 function onSensors(d) {
   lastSensorAt = Date.now();
   cal.onReading(d);
@@ -535,99 +558,134 @@ function onSensors(d) {
     if (v == null || Number.isNaN(v)) {
       t.value.firstChild.nodeValue = "—";
       t.mark.hidden = true;
-      setStatus(t.status, "", "dash", s.key === "level_pct" ? "No echo: check sensor" : "No reading");
-      continue;
-    }
-    if (s.key === "ec" && d.ec_low) {
+      setFlag(t, "", "", s.key === "level_pct" ? "No echo: check sensor" : "No reading");
+    } else if (s.key === "ec" && d.ec_low) {
       t.value.firstChild.nodeValue = "< 0.6";
       t.mark.hidden = true;
-      setStatus(t.status, "", "dash", "Below sensor floor");
-      continue;
+      setFlag(t, "", "Floor", "Below sensor floor");
+    } else {
+      t.value.firstChild.nodeValue = Number(v).toFixed(s.dec);
+      t.mark.hidden = false;
+      t.mark.style.left = t.pct(v) + "%";
+      const [lo, hi] = s.band, edge = (hi - lo) * 0.1;
+      if (s.key === "level_pct" && d.level_low) setFlag(t, "bad", "Tank low", "Tank low: pumps stopped");
+      else if (v < lo) setFlag(t, "bad", "Low", "Low");
+      else if (v > hi) setFlag(t, "bad", "High", "High");
+      else if (s.key !== "level_pct" && v > hi - edge) setFlag(t, "warn", "Drift", "Drifting high");
+      else if (s.key !== "level_pct" && v < lo + edge) setFlag(t, "warn", "Drift", "Drifting low");
+      else setFlag(t, "good", "", "In range");
     }
-    t.value.firstChild.nodeValue = Number(v).toFixed(s.dec);
-    t.mark.hidden = false;
-    t.mark.style.left = t.pct(v) + "%";
-    const [lo, hi] = s.band, edge = (hi - lo) * 0.1;
-    if (s.key === "level_pct" && d.level_low) setStatus(t.status, "bad", "alert", "Tank low: pumps stopped");
-    else if (v < lo) setStatus(t.status, "bad", "alert", "Low");
-    else if (v > hi) setStatus(t.status, "bad", "alert", "High");
-    else if (s.key !== "level_pct" && v > hi - edge) setStatus(t.status, "warn", "up", "Drifting high");
-    else if (s.key !== "level_pct" && v < lo + edge) setStatus(t.status, "warn", "up", "Drifting low");
-    else setStatus(t.status, "good", "check", "In range");
+    const raw = s.raw.filter((k) => d[k] != null).map((k) => `${k} ${d[k]}`).join(" · ");
+    t.root.title = [`${s.label}: ${t.status}`, `target ${s.band[0]}–${s.band[1]} ${s.unit}`.trim(), raw].filter(Boolean).join("\n");
   }
 
   // pumps
   for (const p of PUMPS) {
     const e = pumpEls[p.key];
     const on = d[p.key];
-    if (on == null) { e.pill.className = "pill unknown"; e.pill.textContent = "—"; e.since.textContent = "Not in ESP32 data (old firmware?)"; e.on = null; continue; }
+    if (on == null) { e.pill.className = "pill unknown"; e.pill.textContent = "—"; e.row.title = e.role + "\nNot in ESP32 data (old firmware?)"; e.on = null; continue; }
     if (on !== e.on) { e.t = e.on == null ? 0 : Date.now(); e.on = on; }   // t=0: state from before page load
     e.pill.className = "pill" + (on ? " on" : "");
     e.pill.textContent = on ? "ON" : "OFF";
   }
-  const mp = $("mode-pill");
-  if (d.pump_auto == null) { mp.className = "pill unknown"; mp.textContent = "—"; }
-  else { mp.className = "pill mode"; mp.textContent = d.pump_auto ? "AUTO" : "MANUAL"; }
-  if (d.level_low) setStatus($("tank-status"), "bad", "lock", "Tank low: all pumps stopped");
-  else if (d.level_pct == null) setStatus($("tank-status"), "", "dash", "Tank level unknown");
-  else setStatus($("tank-status"), "good", "check", "Tank OK · dry-run stop armed");
+  $("mode-val").textContent = d.pump_auto == null ? "—" : d.pump_auto ? "Auto" : "Manual";
+  const tank = $("tank-status");
+  if (d.level_low) { tank.textContent = "Tank low · pumps stopped"; tank.className = "foot bad"; }
+  else if (d.level_pct == null) { tank.textContent = "Tank —"; tank.className = "foot"; }
+  else { tank.textContent = "Tank OK"; tank.className = "foot"; }
 
-  for (const k of RAW) rawEls[k].textContent = d[k] == null ? "—" : String(d[k]);
-  $("raw-meta").textContent = d.ts ? new Date(d.ts * 1000).toLocaleTimeString() : "—";
-  $("session").textContent = d.log_id != null ? `log #${String(d.log_id).padStart(4, "0")} · row ${d.row}` : "—";
+  sessionText = d.log_id != null ? `log #${String(d.log_id).padStart(4, "0")} · row ${d.row}` : "";
 }
 
 // ---------- camera ----------
 let photoUrl = null, lastPhotoAt = 0, lastMqttImageAt = 0, camStatus = "waiting", via = "";
 const HEALTH = {
-  healthy:   { cls: "good", icon: "check", text: "Healthy" },
-  check:     { cls: "warn", icon: "alert", text: "Check leaves" },
-  unhealthy: { cls: "bad",  icon: "alert", text: "Unhealthy" },
-  no_plant:  { cls: "",     icon: "dash",  text: "No plant in view" },
+  healthy:   { cls: "good", text: "Healthy" },
+  check:     { cls: "warn", text: "Check leaves" },
+  unhealthy: { cls: "bad",  text: "Unhealthy" },
+  no_plant:  { cls: "",     text: "No plant" },
 };
 function onImage(bytes) {
   lastMqttImageAt = Date.now(); via = "";
   const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
   const img = $("photo-img");
-  img.onload = () => { if (photoUrl && photoUrl !== url) URL.revokeObjectURL(photoUrl); photoUrl = url; };
+  img.onload = () => { if (photoUrl && photoUrl !== url) URL.revokeObjectURL(photoUrl); photoUrl = url; showPhoto(); };
   img.src = url;
-  img.hidden = false;
-  $("photo-empty").hidden = true;
 }
+// Plant vision card. Yellowing bands match CHECK_YELLOW_PCT / UNHEALTHY_YELLOW_PCT in backend/vision.py.
+const YELLOW_CHECK = 8, YELLOW_BAD = 20;
+let canopyNow = null, canopyYesterday = null;
+function setVal(id, v, dec, unit) {
+  const e = $(id);
+  e.innerHTML = (v == null ? "—" : v.toFixed(dec)) + (unit ? `<small>${unit}</small>` : "");
+}
+function setBar(id, frac) { $(id).style.width = (frac == null ? 0 : Math.max(0, Math.min(1, frac)) * 100) + "%"; }
+function showVision(r) {
+  setVal("f-canopy", r.canopy_pct, 0, "%");
+  setVal("f-yellow", r.yellow_pct, 1, "%");
+  setVal("f-green", r.greenness, 2, "");
+  setBar("b-canopy", r.canopy_pct == null ? null : r.canopy_pct / 100);
+  setBar("b-yellow", r.yellow_pct == null ? null : r.yellow_pct / YELLOW_BAD);
+  setBar("b-green", r.greenness);
+  const ny = $("n-yellow");
+  if (r.yellow_pct == null) ny.textContent = "";
+  else {
+    const st = r.yellow_pct > YELLOW_BAD ? ["bad", "High"] : r.yellow_pct > YELLOW_CHECK ? ["warn", "Check"] : ["good", "Normal"];
+    ny.innerHTML = `<span class="${st[0]}">${st[1]}</span> · under ${YELLOW_CHECK}%`;
+  }
+  $("pv-time").textContent = r.ts ? new Date(r.ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+  canopyNow = r.canopy_pct;
+  canopyNote();
+}
+function canopyNote() {
+  const n = $("n-canopy");
+  if (canopyNow == null || canopyYesterday == null) { n.textContent = ""; return; }
+  const d = canopyNow - canopyYesterday;
+  n.textContent = (d >= 0 ? "+" : "−") + Math.abs(d).toFixed(0) + "% vs yesterday";
+}
+// canopy about 24 h ago, from the camera log (the closest reading within 3 h of that time)
+async function loadYesterday() {
+  try {
+    const r = await fetch("api/vision/history?range=7d", { cache: "no-store" });
+    if (!r.ok) return;
+    const target = Date.now() / 1000 - 86400;
+    let best = null;
+    for (const x of (await r.json()).rows) {
+      if (x.canopy_pct == null || Math.abs(x.ts - target) > 3 * 3600) continue;
+      if (!best || Math.abs(x.ts - target) < Math.abs(best.ts - target)) best = x;
+    }
+    canopyYesterday = best ? best.canopy_pct : null;
+    canopyNote();
+  } catch (e) { console.warn("vision history", e); }
+}
+loadYesterday();
+setInterval(loadYesterday, 15 * 60000);
+function showPhoto() { $("photo-img").hidden = false; $("photo-empty").hidden = true; }
 function showStage(r) {
   const fs = $("f-stage"), fz = $("f-size"), fc = $("f-conf");
   const st = STAGES[r.stage];
-  fs.className = "big" + (st ? "" : " muted");
-  fz.className = "big" + (st ? "" : " muted");
+  fs.className = st ? "" : "muted";
   if (!("stage" in r)) {                       // vision.py without the model
-    fs.textContent = "—"; fz.textContent = "—"; fc.textContent = "model off"; return;
+    fs.textContent = "—"; fz.textContent = "—"; fc.textContent = "off"; return;
   }
-  if (st) {
-    fs.innerHTML = `<i class="swatch" style="background:${st.color}"></i><span></span>`;
-    fs.lastChild.textContent = st.name;
-    fz.textContent = st.size;
-  } else {
-    fs.textContent = r.stage === "uncertain" ? "Uncertain" : "—";
-    fz.textContent = "—";
-  }
-  fc.textContent = r.stage_conf == null ? "—" : Math.round(r.stage_conf * 100) + " %";
+  fs.textContent = st ? st.name : r.stage === "uncertain" ? "Uncertain" : "—";
+  fz.textContent = st ? st.size : "—";
+  fc.textContent = r.stage_conf == null ? "—" : Math.round(r.stage_conf * 100) + "%";
 }
 function onResult(r) {
   if (r.ts && r.ts * 1000 <= lastPhotoAt) return;          // already showing this one
   lastPhotoAt = r.ts ? r.ts * 1000 : Date.now();
-  const h = HEALTH[r.health] || { cls: "", icon: "dash", text: r.health };
+  const h = HEALTH[r.health] || { cls: "", text: r.health || "—" };
   const v = $("verdict");
-  v.className = "verdict " + h.cls;
-  v.innerHTML = ICON[h.icon].replace('width="14" height="14"', 'width="24" height="24"') + "<b></b>";
-  v.lastChild.textContent = h.text;
-  $("f-canopy").textContent = r.canopy_pct == null ? "—" : r.canopy_pct.toFixed(1) + " %";
-  $("f-yellow").textContent = r.yellow_pct == null ? "—" : r.yellow_pct.toFixed(1) + " %";
-  $("f-green").textContent  = r.greenness == null ? "—" : r.greenness.toFixed(2);
+  v.className = "badge " + h.cls;
+  v.textContent = h.text;
+  showVision(r);
   showStage(r);
+  // reasons only when something needs attention
   const ul = $("reasons"); ul.textContent = "";
-  for (const reason of r.health_reasons || []) ul.appendChild(el("li")).textContent = reason;
-  if (r.stage === "uncertain") ul.appendChild(el("li")).textContent = "Stage model is less than 60 % sure";
-  if (r.image) $("saved").textContent = "Last saved: " + r.image;
+  if (h.cls === "warn" || h.cls === "bad") for (const reason of r.health_reasons || []) ul.appendChild(el("li")).textContent = reason;
+  $("f-stage").title = r.stage === "uncertain" ? "Stage model is less than 60 % sure" : "";
+  if (r.image) $("snap").title = "Last saved: " + r.image + " (auto every 15 min)";
 }
 
 // ---------- MQTT over websockets (Mosquitto listener 9001) ----------
@@ -665,9 +723,8 @@ async function pollLive() {
     const r = await res.json();
     if (!r.ts || r.ts * 1000 <= lastPhotoAt) return;
     const img = $("photo-img");
+    img.onload = showPhoto;
     img.src = "live/latest.jpg?t=" + r.ts;
-    img.hidden = false;
-    $("photo-empty").hidden = true;
     via = " · via HTTP";
     camStatus = "online";
     onResult(r);
@@ -683,75 +740,99 @@ const G_SERIES = [
   { key: "temp", label: "Air temp", unit: "°C",    band: [25, 36],   scale: [20, 40],   limit: [0, 50], dec: 1 },
   { key: "hum",  label: "Humidity", unit: "%",     band: [50, 75],   scale: [40, 85],   limit: [0, 100], dec: 1 },
 ];
+// the overview graph can also show water level
+const MINI_SERIES = [...G_SERIES, { key: "level_pct", label: "Water", unit: "%", band: [20, 100], scale: [0, 100], limit: [0, 100], dec: 0 }];
 const RANGE_NOTE = { "1h": "Last hour · every 2 s", "24h": "Last 24 h · 1-min averages", "7d": "Last 7 days · 10-min averages" };
 const REFRESH_MS = { "1h": 10000, "24h": 60000, "7d": 120000 };
 let gRange = "24h", gTable = false, gHist = null, gAct = null, gVis = null, gTimer = null;
 const charts = {};
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const colorOf = (key) => css("--c-" + (key === "level_pct" ? "level" : key));
+function rgba(hex, a) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
 
-function fmtTime(t) {
+function fmtTime(t, range = gRange) {
   const d = new Date(t * 1000);
   const hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  return gRange === "7d" ? d.toLocaleDateString([], { weekday: "short" }) + " " + hm : hm;
+  return range === "7d" ? d.toLocaleDateString([], { weekday: "short" }) + " " + hm : hm;
 }
 function hatch(ctx) {
   const c = document.createElement("canvas"); c.width = c.height = 8;
   const x = c.getContext("2d");
   x.fillStyle = css("--sunk"); x.fillRect(0, 0, 8, 8);
-  x.strokeStyle = "#dcd9cf"; x.lineWidth = 1.2;
+  x.strokeStyle = "#dcdad4"; x.lineWidth = 1.2;
   x.beginPath(); x.moveTo(0, 8); x.lineTo(8, 0); x.stroke();
   return ctx.createPattern(c, "repeat");
+}
+// Shared look: smooth line in the sensor's colour, soft fade under it, light vertical grid only.
+function chartOpts(s, mini) {
+  const color = colorOf(s.key), font = "11px " + css("--sans");
+  return {
+    width: 400, height: 200, legend: { show: false },
+    padding: mini ? [6, 4, 0, 4] : [8, 8, 0, 0],
+    cursor: mini ? { show: false } : { sync: { key: "hydro" }, drag: { x: false, y: false }, points: { size: 7, fill: color }, y: false },
+    scales: {
+      x: { time: true },
+      y: { range: (u, mn, mx) => {
+        // widen to fit the data, but never past the limit so one wild reading can't flatten the chart
+        const lo = mn == null ? s.scale[0] : Math.max(s.limit[0], Math.min(s.scale[0], mn)),
+              hi = mx == null ? s.scale[1] : Math.min(s.limit[1], Math.max(s.scale[1], mx));
+        const pad = (hi - lo) * 0.06; return [lo - pad, hi + pad];
+      } },
+    },
+    axes: [
+      { stroke: css("--muted"), font, grid: { stroke: css("--line"), width: 1 }, ticks: { show: false }, gap: 4, size: 24,
+        values: (u, ts) => ts.map((t) => fmtTime(t, mini ? "24h" : gRange)), space: mini ? 56 : 80 },
+      mini ? { show: false }
+           : { stroke: css("--muted"), font, size: 40, grid: { show: false }, ticks: { show: false },
+               values: (u, v) => v.map((x) => x.toFixed(s.dec === 2 ? 1 : 0)) },
+    ],
+    series: [{}, {
+      stroke: color, width: 2, spanGaps: false, points: { show: false },
+      paths: uPlot.paths.spline(),
+      fill: (u) => {
+        const g = u.ctx.createLinearGradient(0, u.bbox.top, 0, u.bbox.top + u.bbox.height);
+        g.addColorStop(0, rgba(color, 0.26)); g.addColorStop(1, rgba(color, 0));
+        return g;
+      },
+    }],
+    hooks: mini ? {} : {
+      drawClear: [(u) => drawBackdrop(u, s)],
+      setCursor: [(u) => onCursor(u)],
+    },
+  };
+}
+function fitPlot(u, plot) {
+  new ResizeObserver(() => { if (plot.clientWidth) u.setSize({ width: plot.clientWidth, height: plot.clientHeight }); }).observe(plot);
 }
 function buildCharts() {
   const box = $("charts");
   for (const s of G_SERIES) {
     const c = el("section", "card chart");
     c.setAttribute("aria-label", s.label + " history");
-    c.innerHTML = `<div class="hd"><h2>${s.label}${s.unit ? ` <span class="sub">${s.unit}</span>` : ""}</h2><span class="rd"><small></small><b>—</b></span></div>
+    c.innerHTML = `<div class="hd"><h2><i class="swatch" style="background:${colorOf(s.key)}"></i>${s.label}${s.unit ? ` · ${s.unit}` : ""}</h2><span class="rd"><small></small><b>—</b></span></div>
       <div class="plot"></div>`;
     box.appendChild(c);
     const plot = c.querySelector(".plot");
-    const opts = {
-      width: 400, height: 200, legend: { show: false },
-      cursor: { sync: { key: "hydro" }, drag: { x: false, y: false }, points: { size: 7, fill: css("--text") }, y: false },
-      scales: {
-        x: { time: true },
-        y: { range: (u, mn, mx) => {
-          // widen to fit the data, but never past the limit so one wild reading can't flatten the chart
-          const lo = mn == null ? s.scale[0] : Math.max(s.limit[0], Math.min(s.scale[0], mn)),
-                hi = mx == null ? s.scale[1] : Math.min(s.limit[1], Math.max(s.scale[1], mx));
-          const pad = (hi - lo) * 0.04; return [lo - pad, hi + pad];
-        } },
-      },
-      axes: [
-        { stroke: css("--faint"), font: "11px " + css("--mono"), grid: { show: false }, ticks: { stroke: css("--line") },
-          values: (u, ts) => ts.map(fmtTime), space: 70 },
-        { stroke: css("--faint"), font: "11px " + css("--mono"), size: 44, grid: { stroke: css("--line"), width: 1 }, ticks: { show: false },
-          values: (u, v) => v.map((x) => x.toFixed(s.dec === 2 ? 1 : 0)) },
-      ],
-      series: [{}, { stroke: css("--text"), width: 1.6, spanGaps: false, points: { show: false } }],
-      hooks: {
-        drawClear: [(u) => drawBackdrop(u, s)],
-        setCursor: [(u) => onCursor(u)],
-      },
-    };
-    const u = new uPlot(opts, [[], []], plot);
+    const u = new uPlot(chartOpts(s, false), [[], []], plot);
     charts[s.key] = { u, plot, rdT: c.querySelector(".rd small"), rdV: c.querySelector(".rd b"), s };
-    new ResizeObserver(() => { if (plot.clientWidth) u.setSize({ width: plot.clientWidth, height: plot.clientHeight }); }).observe(plot);
+    fitPlot(u, plot);
   }
 }
 function drawBackdrop(u, s) {
   const ctx = u.ctx, { left, top, width, height } = u.bbox;
   ctx.save();
-  // target band
+  // target band, a faint wash of the sensor's colour
   const y1 = u.valToPos(s.band[1], "y", true), y0 = u.valToPos(s.band[0], "y", true);
-  ctx.fillStyle = "rgba(74, 115, 39, 0.14)";
+  ctx.fillStyle = rgba(colorOf(s.key), 0.07);
   ctx.fillRect(left, Math.max(top, y1), width, Math.min(top + height, y0) - Math.max(top, y1));
   // gaps: runs of empty buckets, hatched and labelled
   const xs = u.data[0], ys = u.data[1];
   if (xs && xs.length) {
     const minRun = gRange === "1h" ? 5 : 3, pat = hatch(ctx);
-    ctx.font = `${11 * devicePixelRatio}px ${css("--mono")}`;
+    ctx.font = `${11 * devicePixelRatio}px ${css("--sans")}`;
     let i0 = -1;
     for (let i = 0; i <= xs.length; i++) {
       const empty = i < xs.length && ys[i] == null;
@@ -764,7 +845,7 @@ function drawBackdrop(u, s) {
           const tw = ctx.measureText(label).width, px = devicePixelRatio;
           if (xb - xa > tw + 16 * px) {
             ctx.fillStyle = css("--card"); ctx.fillRect(xa + 4 * px, top + 4 * px, tw + 8 * px, 16 * px);
-            ctx.fillStyle = css("--faint"); ctx.fillText(label, xa + 8 * px, top + 16 * px);
+            ctx.fillStyle = css("--muted"); ctx.fillText(label, xa + 8 * px, top + 16 * px);
           }
         }
         i0 = -1;
@@ -773,6 +854,30 @@ function drawBackdrop(u, s) {
   }
   ctx.restore();
 }
+
+// ---------- overview graph: last 24 h of the sensor picked on the tiles ----------
+let miniKey = "ec", mini = null, miniHist = null, miniTimer = null;
+try { const k = localStorage.getItem("hydro.mini"); if (MINI_SERIES.some((s) => s.key === k)) miniKey = k; } catch (e) {}
+function setMini(key) {
+  miniKey = key;
+  try { localStorage.setItem("hydro.mini", key); } catch (e) {}
+  for (const k in tileEls) tileEls[k].root.setAttribute("aria-pressed", String(k === key));
+  const s = MINI_SERIES.find((x) => x.key === key), plot = $("mini-plot");
+  $("mini").setAttribute("aria-label", s.label + ", last 24 hours");
+  if (mini) mini.destroy();
+  mini = new uPlot(chartOpts(s, true), miniHist ? [miniHist.t, miniHist[key]] : [[], []], plot);
+  if (plot.clientWidth) mini.setSize({ width: plot.clientWidth, height: plot.clientHeight });
+}
+new ResizeObserver(() => { const p = $("mini-plot"); if (mini && p.clientWidth) mini.setSize({ width: p.clientWidth, height: p.clientHeight }); }).observe($("mini-plot"));
+async function loadMini() {
+  clearTimeout(miniTimer);
+  try {
+    const r = await fetch("api/history?range=24h", { cache: "no-store" });
+    if (r.ok) { miniHist = await r.json(); if (mini) mini.setData([miniHist.t, miniHist[miniKey]]); }
+  } catch (e) { console.warn("mini history", e); }
+  if (currentTab === "overview") miniTimer = setTimeout(loadMini, 60000);
+}
+$("mini").addEventListener("click", () => showTab("graphs"));
 function lastIdx(arr) { let i = arr.length - 1; while (i >= 0 && arr[i] == null) i--; return i; }
 function readouts(idx) {
   for (const k in charts) {
@@ -804,7 +909,8 @@ function drawLanes() {
       const p = gAct.pumps[k], m = p.on_seconds / 60;
       extra = `${p.count} run${p.count === 1 ? "" : "s"} · ${m < 60 ? Math.round(m) + " min" : (m / 60).toFixed(1) + " h"}`;
     }
-    const lb = el("div", "lb", `<span>${name}</span><span class="num">${extra}</span>`);
+    const lb = el("div", "lb", name.replace("Plant stage", "Stage"));
+    if (extra) lb.title = extra;
     const lane = el("div", "lane");
     box.append(lb, lane);
     const svg = svgEl("svg", { viewBox: "0 0 1000 18", preserveAspectRatio: "none", "aria-hidden": "true" }, lane);
@@ -848,7 +954,7 @@ function renderGraphs() {
 async function loadGraphs() {
   if (!Object.keys(charts).length) buildCharts();
   clearTimeout(gTimer);
-  $("range-note").textContent = RANGE_NOTE[gRange];
+  $("ranges").title = RANGE_NOTE[gRange];
   $("btn-csv").href = "api/export.csv?range=" + gRange;
   try {
     const q = "?range=" + gRange;
@@ -1126,35 +1232,38 @@ $("btn-status").addEventListener("click", () => cal.readStatus());
 setInterval(() => {
   const now = Date.now();
   // ESP32
+  const sess = sessionText ? " · " + sessionText : "";
   if (!lastSensorAt) setDot("esp", "", "ESP32: no data yet");
   else if (now - lastSensorAt > STALE_MS) {
-    setDot("esp", "bad", "ESP32: no data for " + fmtAgo(now - lastSensorAt));
+    setDot("esp", "bad", "ESP32: no data for " + fmtAgo(now - lastSensorAt) + sess);
     for (const s of SENSORS) tileEls[s.key].root.classList.add("stale");
-    for (const p of PUMPS) { const e = pumpEls[p.key]; e.pill.className = "pill unknown"; e.pill.textContent = "—"; e.since.textContent = "No status from ESP32"; }
+    for (const p of PUMPS) { const e = pumpEls[p.key]; e.pill.className = "pill unknown"; e.pill.textContent = "—"; e.row.title = e.role + "\nNo status from ESP32"; }
   } else {
-    setDot("esp", "ok", "ESP32 live · " + fmtAgo(now - lastSensorAt) + " ago");
+    setDot("esp", "ok", "ESP32 live · " + fmtAgo(now - lastSensorAt) + " ago" + sess);
     for (const p of PUMPS) {
       const e = pumpEls[p.key];
       if (e.on == null) continue;
-      e.since.textContent = e.t ? (e.on ? "running " : "off for ") + fmtAgo(now - e.t)
-                                : (e.on ? "running" : "off") + " since before page opened";
+      e.row.title = e.role + "\n" + (e.t ? (e.on ? "running " : "off for ") + fmtAgo(now - e.t)
+                                         : (e.on ? "running" : "off") + " since before page opened");
     }
   }
   // camera
   const stamp = $("photo-stamp");
   if (lastPhotoAt) {
     stamp.hidden = false;
-    stamp.textContent = new Date(lastPhotoAt).toLocaleTimeString() + " · " + fmtAgo(now - lastPhotoAt) + " ago" + via;
+    stamp.textContent = new Date(lastPhotoAt).toLocaleTimeString();
+    stamp.title = fmtAgo(now - lastPhotoAt) + " ago" + via;
   }
   const photo = $("photo");
   if (camStatus.startsWith("offline")) { setDot("cam", "bad", "Camera offline"); photo.classList.add("stale"); }
   else if (lastPhotoAt && now - lastPhotoAt > CAM_STALE_MS) { setDot("cam", "bad", "Camera: no new photo for " + fmtAgo(now - lastPhotoAt)); photo.classList.add("stale"); }
-  else if (lastPhotoAt) { setDot("cam", "ok", "Camera live"); photo.classList.remove("stale"); }
+  else if (lastPhotoAt) { setDot("cam", "ok", "Camera live" + via); photo.classList.remove("stale"); }
   else setDot("cam", "", "Camera: waiting");
   if (currentTab === "calibration") cal.tick();            // countdown moves even between readings
 }, 1000);
 
 // ---------- boot ----------
+setMini(miniKey);
 const first = (location.hash || "").slice(1);
 showTab(["graphs", "calibration"].includes(first) ? first : "overview");
 requestAnimationFrame(() => placeInd($("tabs")));

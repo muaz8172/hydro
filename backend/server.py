@@ -157,7 +157,8 @@ def vision(q):
                 if start <= ts <= end:
                     rows.append({"ts": ts, "stage": r.get("stage") or None,
                                  "stage_conf": num(r.get("stage_conf")), "size": r.get("size") or None,
-                                 "health": r.get("health") or None})
+                                 "health": r.get("health") or None,
+                                 "canopy_pct": num(r.get("canopy_pct"))})
     return {"range": key, "start": start, "end": end, "rows": rows}
 
 

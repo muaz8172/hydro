@@ -601,6 +601,7 @@ let lastSensorAt = 0, sessionText = "";
 function onSensors(d) {
   lastSensorAt = Date.now();
   cal.onReading(d);
+  onLiveReading(d);
   for (const s of SENSORS) {
     const t = tileEls[s.key];
     const v = d[s.key];
@@ -973,6 +974,65 @@ async function loadMini() {
   if (currentTab === "overview") miniTimer = setTimeout(loadMini, 60000);
 }
 $("mini").addEventListener("click", () => showTab("graphs"));
+
+// ---------- live feed into the charts ----------
+// The charts load history from server.py, then every MQTT reading is added straight into the
+// same time grid, so they keep up with the tiles instead of waiting for the next reload.
+// Grid rules copied from history() in backend/server.py: slot i covers [t[i] - bucket, t[i]),
+// pH outside 0-14 and EC at the sensor floor are blanked.
+const LIVE_KEYS = ["ph", "ec", "temp", "hum", "level_pct"];
+function liveValue(d, k) {
+  const v = d[k];
+  if (v == null || Number.isNaN(Number(v))) return null;
+  if (k === "ec" && d.ec_low) return null;
+  if (k === "ph" && !(v >= 0 && v <= 14)) return null;
+  return Number(v);
+}
+function liveAppend(h, d, ts) {
+  if (!h || !h.t || !h.t.length) return false;
+  const b = h.bucket || (h.t[1] - h.t[0]) || 2, last = () => h.t.length - 1;
+  if (ts < h.t[0] - b) return false;
+  h._n = h._n || new Map();                        // readings averaged into each slot here
+  while (ts >= h.t[last()]) {                       // new slot: slide the window forward
+    h.t.push(h.t[last()] + b);
+    const gone = h.t.shift();
+    for (const k of LIVE_KEYS) { h[k].push(null); h[k].shift(); h._n.delete(k + gone); }
+    h.start += b;
+  }
+  h.end = Math.max(h.end, ts);
+  const i = Math.max(0, Math.min(last(), Math.floor((ts - (h.t[0] - b)) / b)));
+  for (const k of LIVE_KEYS) {
+    const v = liveValue(d, k);
+    if (v == null) continue;
+    const key = k + h.t[i], n = h._n.get(key) || (h[k][i] != null ? 1 : 0);
+    h[k][i] = +(((h[k][i] || 0) * n + v) / (n + 1)).toFixed(3);
+    h._n.set(key, n + 1);
+  }
+  return true;
+}
+// keep the pump runs current too (A and B bars)
+function livePumps(ts, d) {
+  if (!gAct || !gAct.pumps) return;
+  for (const k of ["pump_a", "pump_b", "pump_sample"]) {
+    const p = gAct.pumps[k]; if (!p || d[k] == null) continue;
+    const r = p.runs[p.runs.length - 1], open = r && r.open;
+    if (d[k] && open) r.end = ts;
+    else if (d[k] && !open) { p.runs.push({ start: ts, end: ts, cut: false, open: true }); p.count++; }
+    else if (!d[k] && open) { r.end = ts; r.open = false; }
+  }
+}
+let liveFrame = 0;
+function onLiveReading(d) {
+  const ts = d.ts || Date.now() / 1000;
+  const m = liveAppend(miniHist, d, ts), g = liveAppend(gHist, d, ts);
+  if (g) livePumps(ts, d);
+  if ((!m && !g) || liveFrame) return;
+  liveFrame = requestAnimationFrame(() => {        // one redraw per frame at most
+    liveFrame = 0;
+    if (m && mini) mini.setData([miniHist.t, miniHist[miniKey]]);
+    if (g && currentTab === "graphs" && !(gTable && gPage > 0)) renderGraphs();   // don't move rows under the reader
+  });
+}
 function lastIdx(arr) { let i = arr.length - 1; while (i >= 0 && arr[i] == null) i--; return i; }
 function readouts(idx) {
   for (const k in charts) {

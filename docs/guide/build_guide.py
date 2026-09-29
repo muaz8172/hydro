@@ -311,7 +311,8 @@ def cover():
         "sees (the dataset is 224×224). Sensor tiles show a green dot or a short tag (LOW, "
         "HIGH, DRIFT); raw values move to hover tooltips. New Plant vision card (canopy with "
         "change vs yesterday, yellowing, green index); a small 24 h graph follows the tile you "
-        "click; each sensor has its own colour on Sensor History. See section 3.6.<br/>"
+        "click. Sensor History has area charts with value tags, time-in-target rings, pump and "
+        "water-level bars, and a paged table. See section 3.6.<br/>"
         f"• Version 3: <b>New plant dataset:</b> {M['photos']} lettuce photos, balanced across the three "
         f"stages (seedling {M['per_stage'][0]}, vegetative {M['per_stage'][1]}, matured "
         f"{M['per_stage'][2]}), all resized to 224×224 for training. Before: 41 photos with only "
@@ -526,10 +527,13 @@ def how_it_works():
                              "or LOW/HIGH/DRIFT tag; pump rows; Plant vision (canopy % with change vs "
                              "yesterday, yellowing % with Normal under 8 %, green index 0–1); a small "
                              "24 h graph of the tile you click. Hover for details and raw values"],
-                ["Sensor History", "pH (purple), EC (blue), air temperature (orange) and humidity (teal) "
-                           "as smooth lines with a soft fill, for 1 h, 24 h or 7 days; target band "
-                           "tinted, gaps hatched, hover shows values on all four; pump ON lanes and "
-                           "plant stage over time; Table view and CSV download"],
+                ["Sensor History", "Four area charts (pH purple, EC teal, air magenta, humidity blue) "
+                                   "for 1 h, 24 h or 7 days, with dot markers and a tag on the highest "
+                                   "value; hover shows values on all four. Below: time in target as ring "
+                                   "gauges, nutrient pump minutes per slot as bars, the average of each "
+                                   "sensor, water level as capsule bars and plant stage over time. Table "
+                                   "view shows every reading, newest first, one page at a time (as many "
+                                   "rows as fit the screen); CSV downloads the range"],
                 ["Calibration", "Step-by-step EC, pH and tank wizards. Capture buttons stay "
                                 "disabled until the reading is steady; the ESP32's replies show in "
                                 "the page; stored calibration and a hold-to-reset for pH"]],
@@ -624,7 +628,10 @@ def done():
                 ["827a7ce", "Out-of-range pH readings ignored in history; graph axes capped"],
                 ["42c3365", "Minimalist dashboard: new header and tab names, square camera "
                             "frame, Plant vision card, coloured sensor graphs, DM Sans + Fraunces"],
-                ["(this version)", "System guide version 4"]], [0.26, 0.74])
+                ["f90c27b", "Charts leave empty time before/after the data blank"],
+                ["be3eed7", "Sensor History: area charts with value tags, time-in-target rings, "
+                            "pump and water-level bars, paged table"],
+                ["(this version)", "System guide version 4 (updated)"]], [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],
               ["ESP32 + bridge", "Running · sending data with pump columns (log #0007, 23 Sep)"],

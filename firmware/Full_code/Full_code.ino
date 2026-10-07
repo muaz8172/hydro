@@ -2,12 +2,15 @@
  * Hydroponic ESP32 firmware - DHT22 + EC + pH + HC-SR04 -> JSON over USB serial
  *
  * Wiring:
- *   DHT22   : DATA -> GPIO15, VCC -> 3.3V, GND -> GND
- *   EC      : A0 -> GPIO34, VCC -> 3.3V, GND -> GND (T1 unconnected)
- *   pH      : Po -> 10k/20k divider -> GPIO35, V+ -> 5V, G -> GND
- *   HC-SR04 : TRIG -> GPIO32, ECHO -> 1k/2k divider -> GPIO33, VCC -> 5V, GND -> GND
- *   Relay 1 (2ch) : IN1 (Pump A) -> GPIO25, IN2 (Pump B) -> GPIO26, VCC -> 5V, GND -> GND
- *   Relay 2 (2ch) : IN1 (sampling pump) -> GPIO27, IN2 spare (not connected), VCC -> 5V, GND -> GND
+ *   DHT22   : DATA -> GPIO12 (D12), VCC -> 3.3V, GND -> GND
+ *             GPIO12 is a boot strapping pin: if DATA is pulled HIGH at power-on the ESP32 can
+ *             fail to boot. If it won't boot, fix the flash voltage once with
+ *             espefuse.py set_flash_voltage 3.3V (or unplug DHT DATA while it boots).
+ *   EC      : A0 -> GPIO34 (D34), VCC -> 3.3V, GND -> GND (T1 unconnected)
+ *   pH      : Po -> 10k/20k divider -> GPIO35 (D35), V+ -> 5V, G -> GND
+ *   HC-SR04 : TRIG -> GPIO33 (D33), ECHO -> 1k/2k divider -> GPIO32 (D32), VCC -> 5V, GND -> GND
+ *   Relay 1 (2ch) : IN1 (Pump In = Pump A) -> GPIO18 (D18), IN2 (Pump Out = Pump B) -> GPIO19 (D19), VCC -> 5V, GND -> GND
+ *   Relay 2 (2ch) : IN1 (Pump N = sampling pump) -> GPIO21 (D21), IN2 spare (not connected), VCC -> 5V, GND -> GND
  *
  * Output (every 2 s, one line):
  *   {"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,
@@ -43,15 +46,15 @@
 #include <EEPROM.h>
 
 // ---------- Pins ----------
-#define DHT_PIN        15
+#define DHT_PIN        12       // D12 (strapping pin, see wiring note above)
 #define DHT_TYPE       DHT22
-#define EC_PIN         34
-#define PH_PIN         35
-#define TRIG_PIN       32
-#define ECHO_PIN       33
-#define PUMP_A_PIN     25       // relay 1 IN1
-#define PUMP_B_PIN     26       // relay 1 IN2
-#define SAMPLE_PIN     27       // relay 2 IN1 (sampling pump)
+#define EC_PIN         34       // D34
+#define PH_PIN         35       // D35
+#define TRIG_PIN       33       // D33
+#define ECHO_PIN       32       // D32 (via 1k/2k divider)
+#define PUMP_A_PIN     18       // D18 relay 1 IN1 (Pump In)
+#define PUMP_B_PIN     19       // D19 relay 1 IN2 (Pump Out)
+#define SAMPLE_PIN     21       // D21 relay 2 IN1 (Pump N, sampling pump)
 
 // ---------- Pump control ----------
 #define RELAY_ACTIVE_LOW  true  // both 2-ch relays: LOW = ON. Set false if reversed

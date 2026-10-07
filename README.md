@@ -55,12 +55,12 @@ hydro/
 
 | Sensor | Module pin | ESP32 pin | Notes |
 |---|---|---|---|
-| DHT22 (air temp/humidity) | DATA / VCC / GND | GPIO15 / 3.3V / GND | 10k pull-up if the module has none |
-| EC sensor (EC V2.1) | A0 / VCC / GND | GPIO34 / **3.3V** / GND | T1 unconnected |
-| pH sensor (PH-4502C) | Po / V+ / G | GPIO35 via divider / **5V** / GND | Do, To unconnected |
-| HC-SR04 (water level) | TRIG / ECHO / VCC / GND | GPIO32 / GPIO33 via divider / **5V** / GND | Mounted above the tank, facing down |
-| 2-channel relay 1 (Pump A / Pump B) | IN1 / IN2 / VCC / GND | GPIO25 / GPIO26 / **5V** / GND | Active LOW; GND shared with ESP32 |
-| 2-channel relay 2 (sampling pump) | IN1 / IN2 / VCC / GND | GPIO27 / spare / **5V** / GND | Active LOW; IN2 not connected; GND shared with ESP32 |
+| DHT22 (air temp/humidity) | DATA / VCC / GND | GPIO12 (D12) / 3.3V / GND | 10k pull-up if the module has none. GPIO12 is a strapping pin: if the ESP32 won't boot, run `espefuse.py set_flash_voltage 3.3V` once |
+| EC sensor (EC V2.1) | A0 / VCC / GND | GPIO34 (D34) / **3.3V** / GND | T1 unconnected |
+| pH sensor (PH-4502C) | Po / V+ / G | GPIO35 (D35) via divider / **5V** / GND | Do, To unconnected |
+| HC-SR04 (water level) | TRIG / ECHO / VCC / GND | GPIO33 (D33) / GPIO32 (D32) via divider / **5V** / GND | Mounted above the tank, facing down |
+| 2-channel relay 1 (Pump In = Pump A / Pump Out = Pump B) | IN1 / IN2 / VCC / GND | GPIO18 (D18) / GPIO19 (D19) / **5V** / GND | Active LOW; GND shared with ESP32 |
+| 2-channel relay 2 (Pump N = sampling pump) | IN1 / IN2 / VCC / GND | GPIO21 (D21) / spare / **5V** / GND | Active LOW; IN2 not connected; GND shared with ESP32 |
 
 **pH voltage divider (required).** The PH-4502C runs on 5V and its output can exceed 3.3V:
 
@@ -72,10 +72,10 @@ Po --[10k]--+-- GPIO35
 GND --------+
 ```
 
-**HC-SR04 echo divider (required).** The HC-SR04 runs on 5V, so its ECHO pulse is 5V. TRIG can be driven directly from GPIO32 (3.3V is enough):
+**HC-SR04 echo divider (required).** The HC-SR04 runs on 5V, so its ECHO pulse is 5V. TRIG can be driven directly from GPIO33 (3.3V is enough):
 
 ```
-ECHO --[1k]--+-- GPIO33
+ECHO --[1k]--+-- GPIO32
              |
            [2k]
              |
@@ -129,7 +129,7 @@ Lines starting with `#` or `>>>` are messages, not data.
 
 `firmware/Relay_Test/Relay_Test.ino` is a standalone sketch that checks the 2-channel relay module before it goes into the main firmware.
 
-**Setup:** relay **IN1 → Pump A**, **IN2 → Pump B** (GPIO25 / GPIO26). Only Pump A and Pump B are connected to the relay.
+**Setup:** relay **IN1 → Pump A (Pump In)**, **IN2 → Pump B (Pump Out)** (GPIO18 / GPIO19). Only Pump A and Pump B are connected to the relay.
 
 **Method:**
 1. Upload `Relay_Test.ino`, open the Serial Monitor (115200, Newline).
@@ -188,7 +188,7 @@ The pump state is in every JSON line (`pump_a`, `pump_b`, `pump_auto`), and `sta
 
 ### Sampling pump (always on)
 
-**Relay 2 IN1 (GPIO27)**, on the second 2-channel relay, drives the sampling pump. It **runs all the time**, starting 30 s after the ESP32 boots (see start delay above), and is not affected by EC/pH.
+**Relay 2 IN1 (GPIO21)**, on the second 2-channel relay, drives the sampling pump (Pump N). It **runs all the time**, starting 30 s after the ESP32 boots (see start delay above), and is not affected by EC/pH.
 
 | Command | Action |
 |---|---|
@@ -581,7 +581,7 @@ git push
 
 - [x] ESP32 firmware: DHT22, EC, pH with calibration
 - [x] USB serial → MQTT bridge on Pi 5
-- [x] HC-SR04 water level sensor (firmware: TRIG GPIO32, ECHO GPIO33)
+- [x] HC-SR04 water level sensor (firmware: TRIG GPIO33, ECHO GPIO32)
 - [ ] DS18B20 water temperature (EC temperature compensation)
 - [x] CSV session logs (new file per ESP32 connection)
 - [x] History API (`backend/server.py`: `/api/history`, pump runs, vision, CSV export)

@@ -18,8 +18,9 @@ from reportlab.platypus import (Flowable, KeepTogether, PageBreak, Paragraph, Si
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), "Hydro_System_Guide.pdf")
-VERSION = "4"
-DATE = "29 September 2026"
+VERSION = "5"
+DATE = "7 October 2026"
+MODEL_DATE = "29 September 2026"   # last stage-model retrain
 
 FONTS = "/usr/share/fonts/truetype/dejavu"
 pdfmetrics.registerFont(TTFont("Sans", f"{FONTS}/DejaVuSans.ttf"))
@@ -239,7 +240,7 @@ def draw_relays(d):
     d.text(9, 179, "GND → GND of both relays")
     d.box(178, 0, 122, 85, "Relay 1 (2-channel)", ["Nutrient dosing"], "blueline")
     d.box(178, 100, 122, 85, "Relay 2 (2-channel)", ["Sampling pump + spare"], "blueline")
-    for top, pin in ((47, "GPIO25"), (69, "GPIO26"), (142, "GPIO27")):
+    for top, pin in ((47, "GPIO18"), (69, "GPIO19"), (142, "GPIO21")):
         d.text(112, top + 3, pin, font="Mono", size=7, color=INK, anchor="right")
         d.line(118, top, 178, top)
     for base in (0, 100):
@@ -247,9 +248,9 @@ def draw_relays(d):
             d.text(185, base + top + 3, f"IN{k + 1}", font="Mono", size=7, color=INK)
             d.text(293, base + top + 3, f"CH{k + 1}", font="Mono", size=7, color=INK,
                    anchor="right")
-    d.box(357, 21, 125, 26, "Pump A (nutrient A)")
-    d.box(357, 57, 125, 26, "Pump B (nutrient B)")
-    d.box(357, 116, 125, 26, "Sampling pump")
+    d.box(357, 21, 125, 26, "Pump In (Pump A)")
+    d.box(357, 57, 125, 26, "Pump Out (Pump B)")
+    d.box(357, 116, 125, 26, "Pump N (sampling)")
     d.box(357, 152, 125, 26, "Spare (not connected)", style="grey")
     d.line(300, 47, 357, 34)
     d.line(300, 69, 357, 70)
@@ -305,7 +306,11 @@ def cover():
     s += [Spacer(1, 8)]
     s += callout(
         f"<b>What's new in version {VERSION}</b><br/>"
-        "• <b>Minimalist dashboard</b> titled Hydroponic System Monitoring, with tabs Live "
+        "• <b>New ESP32 pin layout:</b> Pump In (Pump A) D18, Pump Out (Pump B) D19, "
+        "Pump N (sampling pump) D21, DHT22 D12, HC-SR04 TRIG D33 / ECHO D32 (ECHO divider "
+        "moves to D32); EC D34 and pH D35 unchanged. Pump logic, commands and JSON fields are "
+        "the same. D12 is a boot strapping pin: see section 2. Rewire before re-flashing.<br/>"
+        "• Version 4: <b>Minimalist dashboard</b> titled Hydroponic System Monitoring, with tabs Live "
         "Monitoring, Sensor History and Calibration, and DM Sans + Fraunces fonts (stored "
         "offline). The camera frame is square and shows the same centre crop the stage model "
         "sees (the dataset is 224×224). Sensor tiles show a green dot or a short tag (LOW, "
@@ -357,20 +362,20 @@ def overview():
 def hardware():
     s = [H1("2. Hardware and wiring")]
     s += table([["Part", "Pins", "ESP32 / Pi", "Notes"],
-                ["DHT22 (air temp / humidity)", "DATA / VCC / GND", "GPIO15 / 3.3 V / GND",
-                 "10 k pull-up if the module has none"],
-                ["EC sensor (EC V2.1)", "A0 / VCC / GND", "GPIO34 / 3.3 V / GND",
+                ["DHT22 (air temp / humidity)", "DATA / VCC / GND", "GPIO12 (D12) / 3.3 V / GND",
+                 "10 k pull-up if the module has none; D12 is a strapping pin (see below)"],
+                ["EC sensor (EC V2.1)", "A0 / VCC / GND", "GPIO34 (D34) / 3.3 V / GND",
                  "T1 unconnected; EC maths built into the firmware"],
-                ["pH sensor (PH-4502C)", "Po / V+ / G", "GPIO35 via divider / 5 V / GND",
+                ["pH sensor (PH-4502C)", "Po / V+ / G", "GPIO35 (D35) via divider / 5 V / GND",
                  "10 k / 20 k divider is required"],
                 ["HC-SR04 (water level)", "TRIG / ECHO / VCC / GND",
-                 "GPIO32 / GPIO33 via divider / 5 V / GND",
+                 "GPIO33 (D33) / GPIO32 (D32) via divider / 5 V / GND",
                  "1 k / 2 k divider on ECHO; mounted above the tank, facing down"],
                 ["Relay 1 (2-channel)", "IN1 / IN2 / VCC / GND",
-                 "GPIO25 (Pump A) / GPIO26 (Pump B) / 5 V / GND",
+                 "GPIO18 (Pump In) / GPIO19 (Pump Out) / 5 V / GND",
                  "Active LOW; GND shared with the ESP32"],
                 ["Relay 2 (2-channel)", "IN1 / IN2 / VCC / GND",
-                 "GPIO27 (sampling pump) / not connected / 5 V / GND",
+                 "GPIO21 (Pump N, sampling) / not connected / 5 V / GND",
                  "Active LOW; IN2 is a spare channel; GND shared with the ESP32"],
                 ["ESP32 → Pi", "USB", "/dev/esp32 (udev rule)", "115200 baud, one JSON line every 2 s"],
                 ["MaixCAM → Pi", "USB-C", "10.122.173.1 (camera), 10.122.173.100 (Pi)",
@@ -379,6 +384,12 @@ def hardware():
     s += [P("Never put more than 3.3 V on an ESP32 pin. The pH module and the HC-SR04 run on 5 V, "
             "which is why their outputs go through voltage dividers. Keep the pH and EC probes in "
             "separate containers when testing; they interfere with each other.", small),
+          Spacer(1, 6),
+          P(f"<b>GPIO12 (DHT22) is a boot strapping pin.</b> The DHT22 pull-up holds it HIGH at "
+            "power-on, which makes most ESP32 boards pick 1.8 V flash and fail to boot (reset loop "
+            f"or upload errors). If that happens, run {c('espefuse.py set_flash_voltage 3.3V')} "
+            "once (permanent), or move DHT DATA to a free pin such as GPIO4 and change "
+            f"{c('DHT_PIN')}.", small),
           PageBreak()]
 
     s += [H2("2.1 Relays: two 2-channel modules"),
@@ -387,9 +398,9 @@ def hardware():
             "relay 2 runs the sampling pump and keeps one channel free."),
           Spacer(1, 8), Diagram(188, draw_relays), Spacer(1, 10)]
     s += table([["Relay", "Channel", "ESP32 pin", "Drives", "Firmware name", "JSON field"],
-                ["Relay 1", "IN1", "GPIO25", "Pump A (nutrient A)", c("PUMP_A_PIN"), c("pump_a")],
-                ["Relay 1", "IN2", "GPIO26", "Pump B (nutrient B)", c("PUMP_B_PIN"), c("pump_b")],
-                ["Relay 2", "IN1", "GPIO27", "Sampling pump", c("SAMPLE_PIN"), c("pump_sample")],
+                ["Relay 1", "IN1", "GPIO18", "Pump In (Pump A)", c("PUMP_A_PIN"), c("pump_a")],
+                ["Relay 1", "IN2", "GPIO19", "Pump Out (Pump B)", c("PUMP_B_PIN"), c("pump_b")],
+                ["Relay 2", "IN1", "GPIO21", "Pump N (sampling pump)", c("SAMPLE_PIN"), c("pump_sample")],
                 ["Relay 2", "IN2", "—", "Spare, not connected", "—", "—"]],
                [0.12, 0.11, 0.13, 0.24, 0.2, 0.2])
     s += bullets([
@@ -504,7 +515,7 @@ def how_it_works():
             f"to {c('backend/models/stage.onnx')}, which {c('vision.py')} runs with ONNX Runtime "
             f"from the {c('.venv')} environment. The full report is "
             f"{c('backend/models/stage_report.md')}.")]
-    s += table([[f"Result ({M['photos']} photos, retrained {DATE})", "Value"],
+    s += table([[f"Result ({M['photos']} photos, retrained {MODEL_DATE})", "Value"],
                 ["Model chosen", M["chosen"]],
                 ["Test accuracy", f"{M['acc']} (always-guess-one-stage baselines: {M['base_acc']})"],
                 ["Train accuracy", M["train_acc"]],
@@ -580,13 +591,18 @@ def done():
             ["ESP32 firmware", "HC-SR04 water level with tank calibration", "Done"],
             ["ESP32 firmware", "Pump A/B auto control to EC 1.2–1.8 and pH 5.5–6.5; manual commands",
              "Done"],
-            ["ESP32 firmware", "Always-on sampling pump (GPIO27) and tank-low stop for all pumps",
+            ["ESP32 firmware", "Always-on sampling pump (GPIO21) and tank-low stop for all pumps",
              "Done"],
             ["ESP32 firmware", f"Air temperature target 25–36 °C, reported as {c('temp_ok')}", "Done"],
             ["ESP32 firmware", "Start delay after boot: sampling pump 30 s, Pump A/B auto 60 s", "Done"],
             ["Hardware", "1-channel relay replaced by a second 2-channel relay (sampling pump on "
                          f"relay 2 IN1; IN2 spare); one shared {c('RELAY_ACTIVE_LOW')}", "Done"],
-            ["Testing", "Relay test sketch: relay 1 switched Pump A and Pump B correctly", "Done"],
+            ["Hardware", "New pin layout: pumps D18 / D19 / D21, DHT22 D12, HC-SR04 TRIG D33 / "
+                         "ECHO D32; firmware, test sketches and docs updated", "Done"],
+            ["Testing", "Relay test sketch: relay 1 switched Pump A and Pump B correctly (old pins)",
+             "Done"],
+            ["Testing", "Rewire to the new pins, re-flash, check every sensor and relay; confirm "
+                        "the ESP32 boots with the DHT22 on D12", "To do"],
             ["Testing", f"Sampling pump on relay 2: check with {c('sampleoff')} / {c('sampleon')}",
              "To do"],
             ["Raspberry Pi", "Serial → MQTT bridge with auto-reconnect and fixed /dev/esp32 name",
@@ -653,15 +669,18 @@ def done():
                 ["f8898e1 · 4b692ae", "Bridge starts when the ESP32 is plugged in and stops when it "
                                       "is unplugged; it resets the ESP32 on connect"],
                 ["aa305f1", "Pump start delay after ESP32 boot (sampling 30 s, Pump A/B 60 s)"],
-                ["(this version)", "System guide version 4 (updated)"]], [0.26, 0.74])
+                ["98d2714", "System guide version 4"],
+                ["9680cb3", "ESP32 pins moved: pumps D18/D19/D21, DHT22 D12, HC-SR04 TRIG D33 / "
+                            "ECHO D32"],
+                ["(this version)", "System guide version 5: new pin layout"]], [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],
               ["ESP32 + bridge", "Running · started by itself after a Pi reboot (log #0043, 29 Sep)"],
-              ["Firmware", f"Updated · pump start delay added (29 Sep). Re-flash "
-                           f"{c('Full_code.ino')} and confirm the sampling pump runs on relay 2 IN1"],
+              ["Firmware", f"Updated · new pin layout (7 Oct). Rewire, re-flash "
+                           f"{c('Full_code.ino')}, then check every sensor and pump"],
               ["Mosquitto", "Running"],
               ["MaixCAM", "Running · photos reach the Pi; aim the camera at the plants"],
-              ["Stage model", f"Updated {DATE} · retrained on {M['photos']} photos; restart "
+              ["Stage model", f"Updated {MODEL_DATE} · retrained on {M['photos']} photos; restart "
                               f"{c('hydro-vision')} to load it"],
               ["vision.py / dashboard", "Running · services enabled, start at every boot"],
               ["pH probe", "Check · still reads 19.71 on 29 Sep: disconnected or not in solution"],
@@ -786,12 +805,12 @@ def calibration():
                                                     "Arduino Serial Monitor (only one program can use "
                                                     "the port)"],
                 ["Sampling pump does not run", f"Check {c('pump_sample')} in the JSON. If it is true "
-                 "but the pump is off: relay 2 IN1 on GPIO27, relay 2 VCC on 5 V, GND shared with the "
+                 "but the pump is off: relay 2 IN1 on GPIO21 (D21), relay 2 VCC on 5 V, GND shared with the "
                  "ESP32, pump on the CH1 contacts (not CH2). If it is false: less than 30 s since the "
                  f"ESP32 started (start delay), tank low, or {c('sampleoff')} was sent (send {c('sampleon')})"],
                 ["A relay is ON when it should be OFF", f"The module is active HIGH: set "
                  f"{c('RELAY_ACTIVE_LOW')} to {c('false')} and re-upload (it applies to both relays)"],
-                ["Pumps A/B never switch", f"Relay 1 IN1/IN2 on GPIO25/26; test with "
+                ["Pumps A/B never switch", f"Relay 1 IN1/IN2 on GPIO18/19 (D18/D19); test with "
                                            f"{c('firmware/Relay_Test/')}; check the tank is not low and that 60 s "
                                            "have passed since the ESP32 started"],
                 ["pH stuck (e.g. 19.71)", "Probe/BNC disconnected or not calibrated; check wiring, "
@@ -799,7 +818,10 @@ def calibration():
                 [f"{c('ec_low: true')}", "Solution below about 0.6 mS/cm (normal for plain water)"],
                 ["Water level empty", "HC-SR04 gets no echo: check wiring, the ECHO divider, and "
                                       "that it faces the water"],
-                [f"{c('temp_ok: null')}", "No DHT22 reading: check the DHT22 wiring and pull-up resistor"],
+                [f"{c('temp_ok: null')}", "No DHT22 reading: check the DHT22 wiring (DATA on D12) and pull-up resistor"],
+                ["ESP32 won't boot / upload fails after rewiring", f"DHT22 DATA on GPIO12 (strapping "
+                 f"pin) is HIGH at boot. Unplug DATA to confirm, then run "
+                 f"{c('espefuse.py set_flash_voltage 3.3V')} once, or move the DHT22 to GPIO4"],
                 ["Dashboard shows old data", "Hard refresh (Ctrl+Shift+R). If the header says \"Live "
                  "link down\", the browser can't reach MQTT on port 9001: restart the browser or turn "
                  "off HTTPS-Only for the site. The camera photo still updates via HTTP"],

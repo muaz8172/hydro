@@ -1,14 +1,14 @@
 /*
  * 2-channel relay test on ESP32
- * IN1 -> GPIO25, IN2 -> GPIO26
+ * IN1 -> GPIO18 (D18, Pump In), IN2 -> GPIO19 (D19, Pump Out)
  * VCC -> 5V, GND -> GND (shared with ESP32)
  *
  * Serial Monitor: 115200 baud, line ending = Newline
  * Commands: 1on  1off  2on  2off  alloff  auto
  */
 
-#define RELAY1_PIN  25
-#define RELAY2_PIN  26
+#define RELAY1_PIN  18      // D18 Pump In
+#define RELAY2_PIN  19      // D19 Pump Out
 
 #define ACTIVE_LOW  true    // most relay modules: LOW = ON. Set false if yours is reversed
 

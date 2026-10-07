@@ -184,9 +184,9 @@ Three pumps, each switched by its own relay on the ESP32:
 |---|---|---|---|
 | Pump | Relay / GPIO | Job | JSON field | CSV column |
 |---|---|---|---|---|
-| Nutrient pump A | 2-ch relay IN1 / GPIO25 (active LOW) | Doses nutrient A | `pump_a` | `pump_a` |
-| Nutrient pump B | 2-ch relay IN2 / GPIO26 (active LOW) | Doses nutrient B | `pump_b` | `pump_b` |
-| Sampling pump | 2-ch relay 2 IN1 / GPIO27 (active LOW) | Moves water for sampling, **always on** | `pump_sample` | `pump_sample` |
+| Pump In (nutrient pump A) | 2-ch relay IN1 / GPIO18 (active LOW) | Doses nutrient A | `pump_a` | `pump_a` |
+| Pump Out (nutrient pump B) | 2-ch relay IN2 / GPIO19 (active LOW) | Doses nutrient B | `pump_b` | `pump_b` |
+| Pump N (sampling pump) | 2-ch relay 2 IN1 / GPIO21 (active LOW) | Moves water for sampling, **always on** | `pump_sample` | `pump_sample` |
 | Mode | n/a | `true` = AUTO (EC/pH target), `false` = MANUAL | `pump_auto` | `pump_auto` |
 
 The dashboard **only displays** pump status in this phase. It has no ON/OFF buttons. The ESP32 decides when pumps run.
@@ -412,7 +412,7 @@ backend/
 ## Open decisions
 - ~~Air temperature band~~: decided 25–36 °C (2026-09-24, `TEMP_MIN`/`TEMP_MAX` in the firmware, reported as `temp_ok`). Humidity band still a placeholder (50–75 %).
 - Whether the Pi drives a touchscreen kiosk (this affects the default layout and touch sizing).
-- ~~Which GPIO pins drive the relays~~: decided (GPIO25/26/27, active LOW).
+- ~~Which GPIO pins drive the relays~~: decided (GPIO18/19/21, active LOW; moved from GPIO25/26/27 on 7 Oct 2026).
 - Maximum continuous run for Pump A/B in the firmware, and the dashboard "ON long" warning time (placeholder 10 min).
 - Whether A and B should dose in timed pulses instead of running until target (avoids overshoot while sensors settle).
 - What the sampling pump feeds (sensor chamber? tank loop?), for its card's subtitle.

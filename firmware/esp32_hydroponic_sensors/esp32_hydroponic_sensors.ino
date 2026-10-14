@@ -19,14 +19,14 @@
 #include <DHT.h>
 
 // ---------------- Pin definitions (matches project schematic) ----------------
-#define EC_PIN   34   // EC/TDS sensor AO  -> ESP32 GPIO34 (ADC1, WiFi-safe)
-#define PH_PIN   35   // pH sensor AO      -> ESP32 GPIO35 (ADC1, WiFi-safe)
-#define DHT_PIN  12   // DHT22 DATA        -> ESP32 GPIO12 (strapping pin, see Full_code.ino)
+#define EC_PIN   32   // EC/TDS sensor AO  -> ESP32 GPIO32 (ADC1, WiFi-safe)
+#define PH_PIN   33   // pH sensor AO      -> ESP32 GPIO33 (ADC1, WiFi-safe)
+#define DHT_PIN  4    // DHT22 DATA        -> ESP32 GPIO4
 #define DHT_TYPE DHT22
 
 // Reserved for later - HC-SR04 ultrasonic water level sensor
-// #define TRIG_PIN 33   // ESP32 GPIO33
-// #define ECHO_PIN 32   // ESP32 GPIO32 (needs a voltage divider - HC-SR04 echo is 5V, ESP32 GPIO max is 3.3V)
+// #define TRIG_PIN 16   // ESP32 GPIO16
+// #define ECHO_PIN 17   // ESP32 GPIO17 (needs a voltage divider - HC-SR04 echo is 5V, ESP32 GPIO max is 3.3V)
 
 // ---------------- ADC settings ----------------
 #define VREF    3300.0   // ESP32 ADC reference in mV

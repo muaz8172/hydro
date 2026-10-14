@@ -307,9 +307,9 @@ def cover():
     s += callout(
         f"<b>What's new in version {VERSION}</b><br/>"
         "• <b>New ESP32 pin layout:</b> Pump In (Pump A) D18, Pump Out (Pump B) D19, "
-        "Pump N (sampling pump) D21, DHT22 D12, HC-SR04 TRIG D33 / ECHO D32 (ECHO divider "
-        "moves to D32); EC D34 and pH D35 unchanged. Pump logic, commands and JSON fields are "
-        "the same. D12 is a boot strapping pin: see section 2. Rewire before re-flashing.<br/>"
+        "Pump N (sampling pump) D21, DHT22 D4, EC D32, pH D33 (both ADC1), HC-SR04 TRIG D16 / "
+        "ECHO D17 (via its divider). No strapping or flash pins are used. Pump logic, commands "
+        "and JSON fields are the same. Rewire before re-flashing.<br/>"
         "• Version 4: <b>Minimalist dashboard</b> titled Hydroponic System Monitoring, with tabs Live "
         "Monitoring, Sensor History and Calibration, and DM Sans + Fraunces fonts (stored "
         "offline). The camera frame is square and shows the same centre crop the stage model "
@@ -362,14 +362,14 @@ def overview():
 def hardware():
     s = [H1("2. Hardware and wiring")]
     s += table([["Part", "Pins", "ESP32 / Pi", "Notes"],
-                ["DHT22 (air temp / humidity)", "DATA / VCC / GND", "GPIO12 (D12) / 3.3 V / GND",
-                 "10 k pull-up if the module has none; D12 is a strapping pin (see below)"],
-                ["EC sensor (EC V2.1)", "A0 / VCC / GND", "GPIO34 (D34) / 3.3 V / GND",
+                ["DHT22 (air temp / humidity)", "DATA / VCC / GND", "GPIO4 (D4) / 3.3 V / GND",
+                 "10 k pull-up if the module has none"],
+                ["EC sensor (EC V2.1)", "A0 / VCC / GND", "GPIO32 (D32, ADC1) / 3.3 V / GND",
                  "T1 unconnected; EC maths built into the firmware"],
-                ["pH sensor (PH-4502C)", "Po / V+ / G", "GPIO35 (D35) via divider / 5 V / GND",
+                ["pH sensor (PH-4502C)", "Po / V+ / G", "GPIO33 (D33, ADC1) via divider / 5 V / GND",
                  "10 k / 20 k divider is required"],
                 ["HC-SR04 (water level)", "TRIG / ECHO / VCC / GND",
-                 "GPIO33 (D33) / GPIO32 (D32) via divider / 5 V / GND",
+                 "GPIO16 (D16) / GPIO17 (D17) via divider / 5 V / GND",
                  "1 k / 2 k divider on ECHO; mounted above the tank, facing down"],
                 ["Relay 1 (2-channel)", "IN1 / IN2 / VCC / GND",
                  "GPIO18 (Pump In) / GPIO19 (Pump Out) / 5 V / GND",
@@ -385,11 +385,9 @@ def hardware():
             "which is why their outputs go through voltage dividers. Keep the pH and EC probes in "
             "separate containers when testing; they interfere with each other.", small),
           Spacer(1, 6),
-          P(f"<b>GPIO12 (DHT22) is a boot strapping pin.</b> The DHT22 pull-up holds it HIGH at "
-            "power-on, which makes most ESP32 boards pick 1.8 V flash and fail to boot (reset loop "
-            f"or upload errors). If that happens, run {c('espefuse.py set_flash_voltage 3.3V')} "
-            "once (permanent), or move DHT DATA to a free pin such as GPIO4 and change "
-            f"{c('DHT_PIN')}.", small),
+          P("<b>Safe pins only.</b> No boot strapping pins (0, 2, 5, 12, 15) or flash pins (6–11) "
+            "are used. EC and pH are on ADC1 (GPIO32/33), which keeps working if Wi-Fi is ever "
+            "turned on; ADC2 pins stop reading analog while Wi-Fi is on.", small),
           PageBreak()]
 
     s += [H2("2.1 Relays: two 2-channel modules"),
@@ -597,12 +595,12 @@ def done():
             ["ESP32 firmware", "Start delay after boot: sampling pump 30 s, Pump A/B auto 60 s", "Done"],
             ["Hardware", "1-channel relay replaced by a second 2-channel relay (sampling pump on "
                          f"relay 2 IN1; IN2 spare); one shared {c('RELAY_ACTIVE_LOW')}", "Done"],
-            ["Hardware", "New pin layout: pumps D18 / D19 / D21, DHT22 D12, HC-SR04 TRIG D33 / "
-                         "ECHO D32; firmware, test sketches and docs updated", "Done"],
+            ["Hardware", "New pin layout: pumps D18 / D19 / D21, DHT22 D4, EC D32, pH D33, "
+                         "HC-SR04 TRIG D16 / ECHO D17; firmware, test sketches and docs updated", "Done"],
             ["Testing", "Relay test sketch: relay 1 switched Pump A and Pump B correctly (old pins)",
              "Done"],
-            ["Testing", "Rewire to the new pins, re-flash, check every sensor and relay; confirm "
-                        "the ESP32 boots with the DHT22 on D12", "To do"],
+            ["Testing", "Rewire to the new pins, re-flash, check every sensor and relay; re-check "
+                        "EC and pH against the buffers", "To do"],
             ["Testing", f"Sampling pump on relay 2: check with {c('sampleoff')} / {c('sampleon')}",
              "To do"],
             ["Raspberry Pi", "Serial → MQTT bridge with auto-reconnect and fixed /dev/esp32 name",
@@ -672,7 +670,8 @@ def done():
                 ["98d2714", "System guide version 4"],
                 ["9680cb3", "ESP32 pins moved: pumps D18/D19/D21, DHT22 D12, HC-SR04 TRIG D33 / "
                             "ECHO D32"],
-                ["(this version)", "System guide version 5: new pin layout"]], [0.26, 0.74])
+                ["(this version)", "System guide version 5: safe pin layout (no strapping pins; "
+                                   "EC/pH on ADC1 GPIO32/33, DHT22 GPIO4, HC-SR04 GPIO16/17)"]], [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],
               ["ESP32 + bridge", "Running · started by itself after a Pi reboot (log #0043, 29 Sep)"],
@@ -818,10 +817,7 @@ def calibration():
                 [f"{c('ec_low: true')}", "Solution below about 0.6 mS/cm (normal for plain water)"],
                 ["Water level empty", "HC-SR04 gets no echo: check wiring, the ECHO divider, and "
                                       "that it faces the water"],
-                [f"{c('temp_ok: null')}", "No DHT22 reading: check the DHT22 wiring (DATA on D12) and pull-up resistor"],
-                ["ESP32 won't boot / upload fails after rewiring", f"DHT22 DATA on GPIO12 (strapping "
-                 f"pin) is HIGH at boot. Unplug DATA to confirm, then run "
-                 f"{c('espefuse.py set_flash_voltage 3.3V')} once, or move the DHT22 to GPIO4"],
+                [f"{c('temp_ok: null')}", "No DHT22 reading: check the DHT22 wiring (DATA on D4) and pull-up resistor"],
                 ["Dashboard shows old data", "Hard refresh (Ctrl+Shift+R). If the header says \"Live "
                  "link down\", the browser can't reach MQTT on port 9001: restart the browser or turn "
                  "off HTTPS-Only for the site. The camera photo still updates via HTTP"],

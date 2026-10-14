@@ -1,6 +1,6 @@
 /*
  * EC sensor (EC V2.1) on ESP32 - measurement + calibration
- * Wiring: A0 -> GPIO34, VCC -> 3.3V, GND -> GND, T1 unconnected
+ * Wiring: A0 -> GPIO32, VCC -> 3.3V, GND -> GND, T1 unconnected
  * Requires the patched DFRobot_EC.cpp (saves both K values, commits EEPROM)
  *
  * Serial Monitor: 115200 baud, line ending = Newline
@@ -13,7 +13,7 @@
 #include "DFRobot_EC.h"
 #include <EEPROM.h>
 
-#define EC_PIN      34      // A0 -> GPIO34 (ADC1)
+#define EC_PIN      32      // A0 -> GPIO32 (ADC1)
 #define SAMPLES     30      // readings averaged per measurement
 #define KVALUEADDR  0x0A    // same address the library uses
 

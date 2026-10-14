@@ -2,15 +2,14 @@
  * Hydroponic ESP32 firmware - DHT22 + EC + pH + HC-SR04 -> JSON over USB serial
  *
  * Wiring:
- *   DHT22   : DATA -> GPIO12 (D12), VCC -> 3.3V, GND -> GND
- *             GPIO12 is a boot strapping pin: if DATA is pulled HIGH at power-on the ESP32 can
- *             fail to boot. If it won't boot, fix the flash voltage once with
- *             espefuse.py set_flash_voltage 3.3V (or unplug DHT DATA while it boots).
- *   EC      : A0 -> GPIO34 (D34), VCC -> 3.3V, GND -> GND (T1 unconnected)
- *   pH      : Po -> 10k/20k divider -> GPIO35 (D35), V+ -> 5V, G -> GND
- *   HC-SR04 : TRIG -> GPIO33 (D33), ECHO -> 1k/2k divider -> GPIO32 (D32), VCC -> 5V, GND -> GND
+ *   DHT22   : DATA -> GPIO4 (D4), VCC -> 3.3V, GND -> GND
+ *   EC      : A0 -> GPIO32 (D32, ADC1), VCC -> 3.3V, GND -> GND (T1 unconnected)
+ *   pH      : Po -> 10k/20k divider -> GPIO33 (D33, ADC1), V+ -> 5V, G -> GND
+ *   HC-SR04 : TRIG -> GPIO16 (D16), ECHO -> 1k/2k divider -> GPIO17 (D17), VCC -> 5V, GND -> GND
  *   Relay 1 (2ch) : IN1 (Pump In = Pump A) -> GPIO18 (D18), IN2 (Pump Out = Pump B) -> GPIO19 (D19), VCC -> 5V, GND -> GND
  *   Relay 2 (2ch) : IN1 (Pump N = sampling pump) -> GPIO21 (D21), IN2 spare (not connected), VCC -> 5V, GND -> GND
+ *   No strapping pins (0, 2, 5, 12, 15) and no flash pins (6-11) are used.
+ *   EC and pH are on ADC1 so they keep working if Wi-Fi is ever turned on.
  *
  * Output (every 2 s, one line):
  *   {"temp":28.1,"hum":70.2,"ec":1.45,"ec_low":false,"ph":6.20,"level":9.8,
@@ -46,12 +45,12 @@
 #include <EEPROM.h>
 
 // ---------- Pins ----------
-#define DHT_PIN        12       // D12 (strapping pin, see wiring note above)
+#define DHT_PIN        4        // D4
 #define DHT_TYPE       DHT22
-#define EC_PIN         34       // D34
-#define PH_PIN         35       // D35
-#define TRIG_PIN       33       // D33
-#define ECHO_PIN       32       // D32 (via 1k/2k divider)
+#define EC_PIN         32       // D32 (ADC1)
+#define PH_PIN         33       // D33 (ADC1)
+#define TRIG_PIN       16       // D16
+#define ECHO_PIN       17       // D17 (via 1k/2k divider)
 #define PUMP_A_PIN     18       // D18 relay 1 IN1 (Pump In)
 #define PUMP_B_PIN     19       // D19 relay 1 IN2 (Pump Out)
 #define SAMPLE_PIN     21       // D21 relay 2 IN1 (Pump N, sampling pump)

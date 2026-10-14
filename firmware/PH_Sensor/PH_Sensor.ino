@@ -1,10 +1,10 @@
 /*
  * pH sensor (PH-4502C) test on ESP32
- * V+ -> 5V, G -> GND, Po -> 10k/20k divider -> GPIO35
+ * V+ -> 5V, G -> GND, Po -> 10k/20k divider -> GPIO33
  * Uncalibrated estimate: pH = 7 + (2.5V - Po) / 0.18
  */
 
-#define PH_PIN        35
+#define PH_PIN        33
 #define SAMPLES       30
 #define DIVIDER_RATIO 1.5     // (10k + 20k) / 20k  -> undo the 2/3 divider
 

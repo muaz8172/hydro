@@ -1,8 +1,6 @@
 #include <DHT.h>
 
-#define DHTPIN 12       // DHT22 data pin connected to GPIO 12 (D12)
-                       // GPIO12 is a boot strapping pin: if the ESP32 won't boot with DATA
-                       // connected, run espefuse.py set_flash_voltage 3.3V once
+#define DHTPIN 4        // DHT22 data pin connected to GPIO 4 (D4)
 #define DHTTYPE DHT22   // DHT 22 (AM2302)
 
 DHT dht(DHTPIN, DHTTYPE);

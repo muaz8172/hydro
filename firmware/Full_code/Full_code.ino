@@ -138,7 +138,10 @@ float readEcVoltage()
 // flash mutex: even "calec" outside calibration mode made the next flash access assert in
 // spi_flash_op_lock, so no EC save ever reached flash.
 #define EC_MV_PER_MS 164.0      // 820 * 200 / 1000
-float ecKLow = 1.0, ecKHigh = 1.0, ecK = 1.0;   // K for the 1413 and 12.88 ranges, K in use
+// Built-in K for the 1413 range, used while flash holds no calibration: 1413 uS/cm buffer read
+// 285 mV at 23.5 C (2026-10-13), K = 1.413 * (1 + 0.0185 * (23.5 - 25)) * 164 / 285.
+#define EC_K_LOW_DEFAULT 0.79
+float ecKLow = EC_K_LOW_DEFAULT, ecKHigh = 1.0, ecK = EC_K_LOW_DEFAULT;   // K for the 1413 and 12.88 ranges, K in use
 bool  ecCalMode = false;
 float ecNewLow = NAN, ecNewHigh = NAN;          // captured this session, saved by exitec
 
@@ -146,7 +149,7 @@ void loadEcCal()
 {
   EEPROM.get(EC_KADDR, ecKLow);
   EEPROM.get(EC_KADDR + 4, ecKHigh);
-  if (!(ecKLow  > 0.5 && ecKLow  < 1.5)) ecKLow  = 1.0;   // also catches FF (never saved)
+  if (!(ecKLow  > 0.5 && ecKLow  < 1.5)) ecKLow  = EC_K_LOW_DEFAULT;   // also catches FF (never saved)
   if (!(ecKHigh > 0.5 && ecKHigh < 1.5)) ecKHigh = 1.0;
   ecK = ecKLow;
 }
@@ -361,6 +364,7 @@ void printStatus()
   EEPROM.get(EC_KADDR + 4, kHigh);
   Serial.printf("# EC   Klow=%.3f  Khigh=%.3f%s\n", kLow, kHigh,
                 (kLow == 1.0 && kHigh == 1.0) ? "  (NOT calibrated)" : "");
+  Serial.printf("# EC   in use: Klow=%.3f  Khigh=%.3f\n", ecKLow, ecKHigh);
   float bootLow, bootHigh;
   memcpy(&bootLow, ecBootBytes, 4);
   memcpy(&bootHigh, ecBootBytes + 4, 4);

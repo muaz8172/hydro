@@ -773,7 +773,8 @@ def calibration():
     s += table([["Sensor", "Steps", "Expected"],
                 ["EC", f"{c('enterec')} → probe in 1413 µS/cm buffer → {c('calec')} → {c('exitec')}, then "
                        f"{c('enterec')} → 12.88 mS/cm buffer → {c('calec')} → {c('exitec')}. Each save "
-                       f"prints \"EC K values written to flash\"",
+                       f"prints \"EC K values written to flash\". With nothing saved, the firmware uses a built-in "
+                       f"1413 K of 0.79 (measured 285 mV at 23.5 °C); {c('status')} shows the K in use",
                  "~230 mV in 1413 (148–311 accepted), ~2100 mV in 12.88 (1476–2755); K 0.5–1.5"],
                 ["pH", f"Probe in pH 7 buffer, wait 1–2 min → {c('ph7')} → rinse → pH 4 buffer, "
                        f"wait → {c('ph4')} ({c('phreset')} = defaults)", "Slope about 180 mV/pH"],

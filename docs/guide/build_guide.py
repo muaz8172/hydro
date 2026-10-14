@@ -777,7 +777,7 @@ def calibration():
                        f"1413 K of 0.79 (measured 285 mV at 23.5 °C); {c('status')} shows the K in use",
                  "~230 mV in 1413 (148–311 accepted), ~2100 mV in 12.88 (1476–2755); K 0.5–1.5"],
                 ["pH", f"Probe in pH 7 buffer, wait 1–2 min → {c('ph7')} → rinse → pH 4 buffer, "
-                       f"wait → {c('ph4')} ({c('phreset')} = defaults)", "Slope about 180 mV/pH"],
+                       f"wait → {c('ph4')} ({c('phreset')} = defaults)", "Slope about 246 mV/pH (this probe)"],
                 ["Tank level", f"Tank empty → {c('tankempty')} → fill to MAX → {c('tankfull')} "
                                f"({c('tankreset')} = defaults)",
                  "Empty and full at least 3 cm apart; sensor at least 2 cm above MAX"]],

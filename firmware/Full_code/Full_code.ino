@@ -74,6 +74,10 @@
 #define EC_SAMPLES     30
 #define PH_SAMPLES     30
 #define PH_DIVIDER     1.5      // (10k + 20k) / 20k
+// This probe's measured Po (old formula showed -1.00 in pH 7, -5.09 in pH 4)
+#define PH_DEFAULT_V7  3940.0   // Po (mV) in pH 7 buffer
+#define PH_DEFAULT_V4  4677.0   // Po (mV) in pH 4 buffer (~246 mV/pH)
+#define PH_ADC_LIMIT   4600.0   // Po above this = ~3.07 V at the pin, near the ADC top
 #define US_SAMPLES     5        // ultrasonic pings per reading (median)
 #define US_TIMEOUT     30000UL  // us, ~5 m max
 #define LOW_LEVEL_PCT  20.0     // level_low alarm below this %
@@ -92,8 +96,8 @@ float waterTemp    = 25.0;      // fixed until a DS18B20 is added
 float lastAirTemp  = 25.0;      // from DHT22, used for sound speed
 float ecVoltage    = 0;
 bool  ecBelowRange = false;
-float phV7 = 2500.0;            // Po (mV) at pH 7 - default
-float phV4 = 3040.0;            // Po (mV) at pH 4 - default (~180 mV/pH)
+float phV7 = PH_DEFAULT_V7;     // Po (mV) at pH 7
+float phV4 = PH_DEFAULT_V4;     // Po (mV) at pH 4
 float tankEmptyDist = 20.0;     // cm, sensor -> bottom (empty tank) - default
 float tankFullDist  = 5.0;      // cm, sensor -> water at MAX level  - default
 bool  tankCalibrated = false;
@@ -254,9 +258,10 @@ void loadPhCal()
   float v7, v4;
   EEPROM.get(PH_ADDR_V7, v7);
   EEPROM.get(PH_ADDR_V4, v4);
-  if (!isnan(v7) && v7 > 1000 && v7 < 4000) phV7 = v7;
-  if (!isnan(v4) && v4 > 1000 && v4 < 4500) phV4 = v4;
-  if (phV4 - phV7 < 250) phV4 = phV7 + 540;      // keep slope sane
+  if (!isnan(v7) && v7 > 1000 && v7 < 4500) phV7 = v7;
+  if (!isnan(v4) && v4 > 1000 && v4 < 5000) phV4 = v4;
+  if (phV4 - phV7 < 250 || phV4 - phV7 > 900)    // keep slope sane
+    phV4 = phV7 + (PH_DEFAULT_V4 - PH_DEFAULT_V7);
 }
 
 void savePhCal()
@@ -413,12 +418,12 @@ void handleCommand(char* cmd)
 
   } else if (!strcmp(cmd, "PH7")) {
     float po = readPhPo();
-    if (po < 1500 || po > 3500) {
-      Serial.printf("# pH7 rejected: Po=%.0fmV (expected ~2500)\n", po);
+    if (po < 1500 || po > 4500) {
+      Serial.printf("# pH7 rejected: Po=%.0fmV (expected 1500-4500)\n", po);
       return;
     }
     phV7 = po;
-    if (phV4 - phV7 < 250 || phV4 - phV7 > 900) phV4 = phV7 + 540;
+    if (phV4 - phV7 < 250 || phV4 - phV7 > 900) phV4 = phV7 + (PH_DEFAULT_V4 - PH_DEFAULT_V7);
     savePhCal();
     Serial.printf("# pH7 saved: Po=%.0fmV. Now rinse, put in pH 4, wait 1-2 min, send ph4\n", po);
 
@@ -426,18 +431,20 @@ void handleCommand(char* cmd)
     float po = readPhPo();
     float diff = po - phV7;
     if (diff < 250 || diff > 900) {
-      Serial.printf("# pH4 rejected: Po=%.0fmV, diff from pH7=%.0fmV (expected ~540). Do ph7 first / check buffer\n", po, diff);
+      Serial.printf("# pH4 rejected: Po=%.0fmV, diff from pH7=%.0fmV (expected 250-900). Do ph7 first / check buffer\n", po, diff);
       return;
     }
+    if (po > PH_ADC_LIMIT)
+      Serial.printf("# pH4 warning: Po=%.0fmV is near the ADC limit, below pH 4 will read wrong. Turn the offset pot down\n", po);
     phV4 = po;
     savePhCal();
     Serial.printf("# pH4 saved: Po=%.0fmV  slope=%.1fmV/pH. pH calibration done\n", po, diff / 3.0);
     Serial.printf("# pH formula: pH = %.2f * V + %.2f\n", phSlope(), phOffset());
 
   } else if (!strcmp(cmd, "PHRESET")) {
-    phV7 = 2500.0; phV4 = 3040.0;
+    phV7 = PH_DEFAULT_V7; phV4 = PH_DEFAULT_V4;
     savePhCal();
-    Serial.println("# pH calibration reset to defaults");
+    Serial.printf("# pH calibration reset to defaults: V7=%.0fmV V4=%.0fmV\n", phV7, phV4);
 
   } else if (!strcmp(cmd, "TANKEMPTY")) {
     float d = readDistanceCm(lastAirTemp);

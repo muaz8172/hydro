@@ -1283,10 +1283,10 @@ const WIZ = {
     title: "pH probe", field: "po_mv", unit: "mV", minWait: 60, tol: () => 5,
     steps: [
       { name: "pH 7", h: "Neutral buffer: pH 7", how: ["Rinse the pH probe and put it in the pH 7 buffer.", "Wait for the reading to settle (1–2 min)."],
-        cmd: "ph7", expect: 3940, ok: /pH7 saved/i, err: /pH7 rejected/i },
+        cmd: "ph7", expect: 4246, ok: /pH7 saved/i, err: /pH7 rejected/i },
       { name: "pH 4", h: "Acid buffer: pH 4", how: ["Rinse the probe and put it in the pH 4 buffer.", "Wait for the reading to settle (1–2 min)."],
-        cmd: "ph4", expectFrom: (c) => c.v7 ? c.v7 + 737 : 4677, ok: /pH4 saved/i, err: /pH4 rejected/i },
-      { name: "Done", h: "Check the slope", how: ["This probe gives about 246 mV per pH unit. Much lower means an old probe or a used-up buffer.", "Rinse the probe and put it back in the tank."], done: true },
+        cmd: "ph4", expectFrom: (c) => c.v7 ? c.v7 + 431 : 4677, ok: /pH4 saved/i, err: /pH4 rejected/i },
+      { name: "Done", h: "Check the slope", how: ["This probe gives about 144 mV per pH unit. Much lower means an old probe or a used-up buffer.", "Rinse the probe and put it back in the tank."], done: true },
     ],
   },
   tank: {

@@ -74,9 +74,9 @@
 #define EC_SAMPLES     30
 #define PH_SAMPLES     30
 #define PH_DIVIDER     1.5      // (10k + 20k) / 20k
-// This probe's measured Po (old formula showed -1.00 in pH 7, -5.09 in pH 4)
-#define PH_DEFAULT_V7  3940.0   // Po (mV) in pH 7 buffer
-#define PH_DEFAULT_V4  4677.0   // Po (mV) in pH 4 buffer (~246 mV/pH)
+// This probe's measured Po (old 2500/3040 formula showed -2.70 in pH 7, -5.09 in pH 4)
+#define PH_DEFAULT_V7  4246.0   // Po (mV) in pH 7 buffer
+#define PH_DEFAULT_V4  4677.0   // Po (mV) in pH 4 buffer (~144 mV/pH)
 #define PH_ADC_LIMIT   4600.0   // Po above this = ~3.07 V at the pin, near the ADC top
 #define US_SAMPLES     5        // ultrasonic pings per reading (median)
 #define US_TIMEOUT     30000UL  // us, ~5 m max

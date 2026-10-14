@@ -231,10 +231,22 @@ float readPhPo()                                 // returns real Po in mV
   return sum / (float)(PH_SAMPLES - 10) * PH_DIVIDER;
 }
 
-float phFromPo(float po)
+// Straight line through the two buffer points, same form as the
+// "pH = -5.70 * V + 21.34" Arduino sketch, but slope/offset come from
+// ph7/ph4 calibration of THIS probe instead of being hard-coded.
+float phSlope()                                  // pH per volt (negative)
 {
-  float slope = 3.0 / (phV4 - phV7);             // pH per mV
-  return 7.0 + (phV7 - po) * slope;
+  return (4.0 - 7.0) / ((phV4 - phV7) / 1000.0);
+}
+
+float phOffset()                                 // pH at 0 V
+{
+  return 7.0 - phSlope() * (phV7 / 1000.0);
+}
+
+float phFromPo(float po)                         // po in mV
+{
+  return phSlope() * (po / 1000.0) + phOffset();
 }
 
 void loadPhCal()
@@ -381,6 +393,7 @@ void printStatus()
   else       Serial.printf("# EC   flash at boot: Klow=%.3f  Khigh=%.3f\n", bootLow, bootHigh);
   Serial.printf("# pH   V7=%.0fmV  V4=%.0fmV  slope=%.1fmV/pH\n",
                 phV7, phV4, (phV4 - phV7) / 3.0);
+  Serial.printf("# pH   formula: pH = %.2f * V + %.2f\n", phSlope(), phOffset());
   Serial.printf("# Tank empty=%.1fcm  full=%.1fcm%s\n",
                 tankEmptyDist, tankFullDist, tankCalibrated ? "" : "  (NOT calibrated)");
   Serial.printf("# Pump %s  A=%s B=%s  stop at target EC %.2f-%.2f and pH %.2f-%.2f\n",
@@ -419,6 +432,7 @@ void handleCommand(char* cmd)
     phV4 = po;
     savePhCal();
     Serial.printf("# pH4 saved: Po=%.0fmV  slope=%.1fmV/pH. pH calibration done\n", po, diff / 3.0);
+    Serial.printf("# pH formula: pH = %.2f * V + %.2f\n", phSlope(), phOffset());
 
   } else if (!strcmp(cmd, "PHRESET")) {
     phV7 = 2500.0; phV4 = 3040.0;

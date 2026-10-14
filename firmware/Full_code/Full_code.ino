@@ -141,7 +141,13 @@ float readEcVoltage()
 // Built-in K for the 1413 range, used while flash holds no calibration: 1413 uS/cm buffer read
 // 285 mV at 23.5 C (2026-10-13), K = 1.413 * (1 + 0.0185 * (23.5 - 25)) * 164 / 285.
 #define EC_K_LOW_DEFAULT 0.79
-float ecKLow = EC_K_LOW_DEFAULT, ecKHigh = 1.0, ecK = EC_K_LOW_DEFAULT;   // K for the 1413 and 12.88 ranges, K in use
+// Built-in K for the 12.88 range: 12.88 mS/cm buffer read about 1330 mV at 23.6 C (2026-10-14),
+// K = 12.88 * (1 + 0.0185 * (23.6 - 25)) * 164 / 1330. This probe reads well below K=1 there, so
+// K is allowed up to 2.0 (DFRobot's limit is 1.5).
+#define EC_K_HIGH_DEFAULT 1.55
+#define EC_K_MIN 0.5
+#define EC_K_MAX 2.0
+float ecKLow = EC_K_LOW_DEFAULT, ecKHigh = EC_K_HIGH_DEFAULT, ecK = EC_K_LOW_DEFAULT;   // K for the 1413 and 12.88 ranges, K in use
 bool  ecCalMode = false;
 float ecNewLow = NAN, ecNewHigh = NAN;          // captured this session, saved by exitec
 
@@ -149,22 +155,24 @@ void loadEcCal()
 {
   EEPROM.get(EC_KADDR, ecKLow);
   EEPROM.get(EC_KADDR + 4, ecKHigh);
-  if (!(ecKLow  > 0.5 && ecKLow  < 1.5)) ecKLow  = EC_K_LOW_DEFAULT;   // also catches FF (never saved)
-  if (!(ecKHigh > 0.5 && ecKHigh < 1.5)) ecKHigh = 1.0;
+  if (!(ecKLow  > EC_K_MIN && ecKLow  < EC_K_MAX)) ecKLow  = EC_K_LOW_DEFAULT;   // also catches FF (never saved)
+  if (!(ecKHigh > EC_K_MIN && ecKHigh < EC_K_MAX)) ecKHigh = EC_K_HIGH_DEFAULT;
   ecK = ecKLow;
 }
 
 float ecFromMv(float mv, float temp)
 {
   float raw = mv / EC_MV_PER_MS;
-  float v = raw * ecK;                           // switch range with a little hysteresis
+  // switch range with a little hysteresis, judged on the low-range scale: Klow and Khigh differ a
+  // lot on this probe, so judging with the K in use could stick on the high range around 2 mS/cm
+  float v = raw * ecKLow;
   if (v > 2.5)      ecK = ecKHigh;
   else if (v < 2.0) ecK = ecKLow;
   return raw * ecK / (1.0 + 0.0185 * (temp - 25.0));
 }
 
 bool ecIsLowBuffer(float raw)  { return raw > 0.9 && raw < 1.9; }    // 1413 uS/cm
-bool ecIsHighBuffer(float raw) { return raw > 9.0 && raw < 16.8; }   // 12.88 mS/cm
+bool ecIsHighBuffer(float raw) { return raw > 6.0 && raw < 16.8; }   // 12.88 mS/cm (this probe: ~8.1)
 
 void ecCommand(const char* cmd, float mv, float temp)
 {
@@ -185,7 +193,7 @@ void ecCommand(const char* cmd, float mv, float temp)
     else if (ecIsHighBuffer(raw)) buffer = 12.88;
     else { Serial.println(">>>Buffer Solution Error Try Again<<<"); return; }
     float k = buffer * (1.0 + 0.0185 * (temp - 25.0)) * EC_MV_PER_MS / mv;
-    if (!(k > 0.5 && k < 1.5)) { Serial.println(">>>Failed,Try Again<<<"); return; }
+    if (!(k > EC_K_MIN && k < EC_K_MAX)) { Serial.println(">>>Failed,Try Again<<<"); return; }
     if (buffer < 2) ecNewLow = k; else ecNewHigh = k;
     Serial.printf(">>>Successful,K:%.2f, Send EXITEC to Save and Exit<<<\n", k);
     return;

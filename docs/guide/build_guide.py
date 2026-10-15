@@ -538,7 +538,7 @@ def how_it_works():
                              "Disconnected/Offline (red). Left: the camera photo in a square frame, "
                              "the same centre crop the stage model sees, with health, growth stage, "
                              "size, confidence and Save photo. Right: tiles for pH, EC, Air Temperature "
-                             "25–36 °C (Cold / Stable / Hot, Stable turns amber near the edges) "
+                             "25–36 °C (blue Cold / Stable / red Hot, Stable turns amber near the edges) "
                              "and humidity with a meter and a green dot or LOW/HIGH/DRIFT tag, plus "
                              "pump mode + tank state; pump rows; Plant vision (canopy % with change vs "
                              "yesterday, yellowing % with Normal under 8 %, green index 0–1); an "

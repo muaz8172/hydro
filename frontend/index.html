@@ -25,6 +25,7 @@
     --good: #346538;   --good-bg: #edf3ec;
     --warn: #956400;   --warn-bg: #fbf3db;
     --bad: #9f2f2d;    --bad-bg: #fdebec;
+    --cold: #2b5c94;   --cold-bg: #e7eff9;
     --active: #1f6c9f; --active-bg: #e1f3fe;
     --band: #c9d8c6;
     --st-seed: #d6e8bd;
@@ -113,6 +114,7 @@
   .badge.good { background: var(--good-bg); color: var(--good); }
   .badge.warn { background: var(--warn-bg); color: var(--warn); }
   .badge.bad  { background: var(--bad-bg);  color: var(--bad); }
+  .badge.cold { background: var(--cold-bg); color: var(--cold); }
 
   /* ---------- overview ---------- */
   .view { flex: 1; min-height: 0; }
@@ -179,6 +181,7 @@
   .meter .mark { position: absolute; top: -4px; width: 2px; height: 11px; background: var(--ink); transform: translateX(-50%); }
   .meter .mark.warn { background: var(--warn); }
   .meter .mark.bad { background: var(--bad); }
+  .meter .mark.cold { background: var(--cold); }
   .tile .foot { font-size: 11.5px; line-height: 1; color: var(--muted); }
   .stale { opacity: 0.45; filter: grayscale(1); }
 
@@ -632,7 +635,7 @@ function setFlag(t, cls, tag, text) {
   if (cls === "good" && !tag) t.flag.innerHTML = '<i class="dot ok"></i>';
   else if (!tag) t.flag.innerHTML = '<i class="dot"></i>';
   else { t.flag.innerHTML = `<span class="badge ${cls}"></span>`; t.flag.firstChild.textContent = tag; }
-  t.mark.className = "mark" + (cls === "warn" || cls === "bad" ? " " + cls : "");
+  t.mark.className = "mark" + (cls === "warn" || cls === "bad" || cls === "cold" ? " " + cls : "");
   t.status = text;
 }
 
@@ -663,7 +666,7 @@ function onSensors(d) {
       if (s.key === "level_pct" && d.level_low) setFlag(t, "bad", "Tank low", "Tank low: pumps stopped");
       // Air temperature reads as Cold / Stable / Hot; amber near the band edges as an early warning
       else if (s.key === "temp") {
-        if (v < lo) setFlag(t, "bad", "Cold", "Cold");
+        if (v < lo) setFlag(t, "cold", "Cold", "Cold");
         else if (v > hi) setFlag(t, "bad", "Hot", "Hot");
         else setFlag(t, v < lo + edge || v > hi - edge ? "warn" : "good", "Stable", "Stable");
       }

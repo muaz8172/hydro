@@ -460,7 +460,12 @@ def how_it_works():
         f"sampling pump waits 30 s ({c('SAMPLE_START_DELAY')}) and Pump A/B wait 60 s "
         f"({c('PUMP_START_DELAY')}) before auto turns them on. Manual commands are not delayed.",
         f"Air temperature is only checked against 25–36 °C and reported as {c('temp_ok')}. No "
-        "relay acts on it."])
+        "relay acts on it.",
+        f"<b>Gap filling</b>: the DHT22 is read every 4 s ({c('DHT_INTERVAL')}); a failed read or a "
+        f"jump over 5 °C / 15 % (a corrupt read) is dropped, and the last good temperature, humidity "
+        f"and water level are sent for up to 20 s ({c('HOLD_MS')}) before they go null. Ultrasonic "
+        f"echoes farther than the empty tank are ghosts and are ignored, and {c('level_low')} needs "
+        f"3 low readings in a row ({c('LOW_CONFIRM')}), so one bad echo cannot stop the pumps."])
     s += table([["Situation", "Pump A + Pump B (relay 1)", "Sampling pump (relay 2)"],
                 ["EC or pH outside target (auto)", "ON", "ON"],
                 ["EC 1.2–1.8 and pH 5.5–6.5 (auto)", "OFF (target reached)", "ON"],
@@ -544,6 +549,8 @@ def how_it_works():
                              "yesterday, yellowing % with Normal under 8 %, green index 0–1); an "
                              "animated water tank filled to the ultrasonic level, with the 20 % "
                              "dry-run line, an OK/LOW tag, water height and distance to the surface. "
+                             "A short sensor gap (under 30 s) keeps the last value greyed out, with "
+                             "'Last reading N s ago' in the tooltip. "
                              "Hover for details and raw values; click a tile for Sensor History"],
                 ["Sensor History", "Four area charts (pH purple, EC teal, air magenta, humidity blue) "
                                    "for 1 h, 24 h or 7 days, with dot markers and a tag on the highest "

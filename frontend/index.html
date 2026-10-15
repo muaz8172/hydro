@@ -184,6 +184,7 @@
   .meter .mark.cold { background: var(--cold); }
   .tile .foot { font-size: 11.5px; line-height: 1; color: var(--muted); }
   .stale { opacity: 0.45; filter: grayscale(1); }
+  .held .value, .held .meter, #tank.held #tank-pct { opacity: 0.55; }
 
   /* pumps: one card, a row per pump */
   .pumps { padding: 4px 16px; display: flex; flex-direction: column; }
@@ -507,6 +508,8 @@
 "use strict";
 const STALE_MS = 10000;          // sensor data older than this -> tile greys out
 const CAM_STALE_MS = 30000;      // camera photo older than this -> "Camera: no new photo"
+const HOLD_MS = 30000;           // a sensor gap shorter than this shows the last value, greyed
+const HOLD_KEYS = ["temp", "hum", "level", "level_pct", "dist_cm"];
 
 // Target bands (must match EC_MIN/EC_MAX/PH_MIN/PH_MAX/TEMP_MIN/TEMP_MAX in firmware/Full_code/Full_code.ino)
 const SENSORS = [
@@ -641,15 +644,29 @@ function setFlag(t, cls, tag, text) {
 
 // ---------- sensors ----------
 let lastSensorAt = 0, sessionText = "";
-function onSensors(d) {
+// Fill short sensor gaps (null from a missed DHT22 / ultrasonic read) with the last good value.
+// Returns a copy of d plus held = { key: seconds since that value was read }.
+const lastGood = {};
+function holdGaps(d) {
+  const out = { ...d }, held = {}, now = Date.now();
+  for (const k of HOLD_KEYS) {
+    if (d[k] != null && !Number.isNaN(Number(d[k]))) lastGood[k] = { v: d[k], at: now };
+    else if (lastGood[k] && now - lastGood[k].at < HOLD_MS) { out[k] = lastGood[k].v; held[k] = Math.round((now - lastGood[k].at) / 1000); }
+  }
+  return [out, held];
+}
+function onSensors(raw) {
   lastSensorAt = Date.now();
-  cal.onReading(d);
-  onLiveReading(d);
+  cal.onReading(raw);
+  onLiveReading(raw);
+  const [d, held] = holdGaps(raw);
   for (const s of SENSORS) {
     const t = tileEls[s.key];
     const v = d[s.key];
     t.root.classList.remove("stale");
+    t.root.classList.toggle("held", s.key in held);
     $("tank").classList.remove("stale");
+    $("tank").classList.toggle("held", "level_pct" in held);
     if (v == null || Number.isNaN(v)) {
       t.value.firstChild.nodeValue = "—";
       t.mark.hidden = true;
@@ -677,6 +694,7 @@ function onSensors(d) {
       else setFlag(t, "good", "", "In range");
     }
     const raw = s.raw.filter((k) => d[k] != null).map((k) => `${k} ${d[k]}`).join(" · ");
+    if (s.key in held) t.status = `Last reading ${held[s.key]} s ago`;
     t.root.title = [`${s.label}: ${t.status}`, `target ${s.band[0]}–${s.band[1]} ${s.unit}`.trim(), raw].filter(Boolean).join("\n");
   }
 

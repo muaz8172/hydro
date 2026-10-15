@@ -16,6 +16,9 @@
  *    "level_pct":72,"level_low":false,"ec_mv":237,"po_mv":2650,"dist_cm":10.2,
  *    "pump_a":true,"pump_b":true,"pump_auto":true,"pump_sample":true,"temp_ok":true}
  *   temp_ok: air temperature inside TEMP_MIN-TEMP_MAX (25-36 C), null if the DHT22 gives no reading.
+ *   Gap filling: temp/hum (DHT22 read every 4 s) and level/dist keep the last good value for
+ *   HOLD_MS (20 s) and only then go null. Corrupt DHT22 jumps and ultrasonic ghost echoes
+ *   (farther than the empty tank) are dropped.
  *   Only reported: nothing on the ESP32 heats or cools.
  * Lines starting with '#' or '>>>' are messages, not data.
  *
@@ -26,7 +29,7 @@
  *   Start delay: after every ESP32 boot (Pi reboot, bridge restart or USB replug) the sampling
  *   pump waits SAMPLE_START_DELAY and Pump A/B wait PUMP_START_DELAY before auto turns them on.
  *   Manual commands (pumpaon, pumpbon, sampleon) are not delayed.
- *   Tank low (level_low, once tank is calibrated) -> ALL pumps OFF, even in manual.
+ *   Tank low (level_low, once tank is calibrated, LOW_CONFIRM low readings in a row) -> ALL pumps OFF, even in manual.
  *
  * Serial commands (115200, line ending = Newline):
  *   EC   : enterec -> (1413 buffer) calec -> (12.88 buffer) calec -> exitec
@@ -81,6 +84,11 @@
 #define US_SAMPLES     5        // ultrasonic pings per reading (median)
 #define US_TIMEOUT     30000UL  // us, ~5 m max
 #define LOW_LEVEL_PCT  20.0     // level_low alarm below this %
+#define LOW_CONFIRM    3        // level_low only after this many low readings in a row (one ghost echo can't stop the pumps)
+#define DHT_INTERVAL   4000     // ms between DHT22 reads (it fails often at its 2 s limit)
+#define HOLD_MS        20000UL  // keep sending the last good temp/hum/level this long before null
+#define DHT_MAX_JUMP_T 5.0      // C   bigger jump between reads = corrupt read, rejected
+#define DHT_MAX_JUMP_H 15.0     // %   (3 rejects in a row = real change, accepted)
 
 // ---------- EEPROM layout ----------
 #define EEPROM_SIZE      48
@@ -299,6 +307,48 @@ float readDistanceCm(float airTemp)
     for (int j = i + 1; j < n; j++)
       if (d[i] > d[j]) { float t = d[i]; d[i] = d[j]; d[j] = t; }
   return d[n / 2];
+}
+
+// DHT22 with gap filling: reads every DHT_INTERVAL, rejects NaN and implausible jumps,
+// and returns the last good value for up to HOLD_MS (then NaN).
+void readDht(float &temp, float &hum)
+{
+  static float goodT = NAN, goodH = NAN;
+  static unsigned long goodAt = 0, readAt = 0;
+  static bool first = true;
+  static int rejects = 0;
+
+  if (first || millis() - readAt >= DHT_INTERVAL) {
+    first = false;
+    readAt = millis();
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+    bool ok = !isnan(t) && !isnan(h) && t > -10 && t < 60 && h >= 0 && h <= 100;
+    if (ok && !isnan(goodT) && millis() - goodAt < HOLD_MS &&
+        (fabs(t - goodT) > DHT_MAX_JUMP_T || fabs(h - goodH) > DHT_MAX_JUMP_H) && ++rejects < 3) {
+      ok = false;
+      if (debugMode) Serial.printf("# DHT22 jump rejected: %.1fC %.1f%%\n", t, h);
+    }
+    if (ok) { goodT = t; goodH = h; goodAt = millis(); rejects = 0; }
+  }
+  bool fresh = !isnan(goodT) && millis() - goodAt < HOLD_MS;
+  temp = fresh ? goodT : NAN;
+  hum  = fresh ? goodH : NAN;
+}
+
+// Ultrasonic with gap filling: ignores echoes farther than the empty tank (ghosts)
+// and returns the last good distance for up to HOLD_MS (then NaN).
+float readDistanceHeld(float airTemp)
+{
+  static float good = NAN;
+  static unsigned long goodAt = 0;
+  float d = readDistanceCm(airTemp);
+  if (!isnan(d) && tankCalibrated && d > tankEmptyDist + 5.0) {
+    if (debugMode) Serial.printf("# Ultrasonic ghost echo ignored: %.1fcm\n", d);
+    d = NAN;
+  }
+  if (!isnan(d)) { good = d; goodAt = millis(); }
+  return (!isnan(good) && millis() - goodAt < HOLD_MS) ? good : NAN;
 }
 
 void computeLevel(float dist, float &levelCm, float &levelPct)
@@ -575,8 +625,8 @@ void loop()
   if (millis() - last >= SEND_INTERVAL) {
     last = millis();
 
-    float hum  = dht.readHumidity();
-    float temp = dht.readTemperature();
+    float temp, hum;
+    readDht(temp, hum);
     if (!isnan(temp)) lastAirTemp = temp;
 
     ecVoltage     = readEcVoltage();
@@ -585,10 +635,14 @@ void loop()
     float po = readPhPo();
     float ph = phFromPo(po);
 
-    float dist = readDistanceCm(lastAirTemp);
+    float dist = readDistanceHeld(lastAirTemp);
     float levelCm, levelPct;
     computeLevel(dist, levelCm, levelPct);
-    bool levelLow = !isnan(levelPct) && levelPct < LOW_LEVEL_PCT;
+    static int lowCount = 0;
+    if (isnan(levelPct)) { }                       // no reading: keep the count as it is
+    else if (levelPct < LOW_LEVEL_PCT) { if (lowCount < LOW_CONFIRM) lowCount++; }
+    else lowCount = 0;
+    bool levelLow = lowCount >= LOW_CONFIRM;
 
     updatePumps(ecValue, ph, levelLow);
 

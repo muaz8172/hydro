@@ -18,8 +18,8 @@ from reportlab.platypus import (Flowable, KeepTogether, PageBreak, Paragraph, Si
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), "Hydro_System_Guide.pdf")
-VERSION = "5"
-DATE = "7 October 2026"
+VERSION = "6"
+DATE = "15 October 2026"
 MODEL_DATE = "29 September 2026"   # last stage-model retrain
 
 FONTS = "/usr/share/fonts/truetype/dejavu"
@@ -306,7 +306,15 @@ def cover():
     s += [Spacer(1, 8)]
     s += callout(
         f"<b>What's new in version {VERSION}</b><br/>"
-        "• <b>New ESP32 pin layout:</b> Pump In (Pump A) D18, Pump Out (Pump B) D19, "
+        "• <b>Steadier sensor readings (gap filling):</b> the DHT22 is read every 4 s, corrupt "
+        "jumps (e.g. a reading of exactly half the real value) are dropped, and the last good "
+        "temperature, humidity and water level are held for 20 s instead of going blank. "
+        "Ultrasonic ghost echoes are ignored and Tank LOW needs 3 low readings in a row, so one "
+        "bad echo no longer stops the pumps. Verified on the ESP32 on 15 Oct. See section 3.2.<br/>"
+        "• <b>pH</b> is now slope × V + offset from the pH 7 / pH 4 calibration, and <b>EC</b> "
+        "calibration accepts this probe's buffer readings. The Air Temperature tile reads Cold / "
+        "Stable / Hot.<br/>"
+        "• Version 5: <b>New ESP32 pin layout:</b> Pump In (Pump A) D18, Pump Out (Pump B) D19, "
         "Pump N (sampling pump) D21, DHT22 D4, EC D32, pH D33 (both ADC1), HC-SR04 TRIG D16 / "
         "ECHO D17 (via its divider). No strapping or flash pins are used. Pump logic, commands "
         "and JSON fields are the same. Rewire before re-flashing.<br/>"
@@ -601,6 +609,8 @@ def done():
              "Done"],
             ["ESP32 firmware", f"Air temperature target 25–36 °C, reported as {c('temp_ok')}", "Done"],
             ["ESP32 firmware", "Start delay after boot: sampling pump 30 s, Pump A/B auto 60 s", "Done"],
+            ["ESP32 firmware", "Gap filling: DHT22 jump reject, 20 s hold for temp/humidity/level, "
+                               "ghost echoes ignored, Tank LOW after 3 lows", "Done"],
             ["Hardware", "1-channel relay replaced by a second 2-channel relay (sampling pump on "
                          f"relay 2 IN1; IN2 spare); one shared {c('RELAY_ACTIVE_LOW')}", "Done"],
             ["Hardware", "New pin layout: pumps D18 / D19 / D21, DHT22 D4, EC D32, pH D33, "
@@ -678,22 +688,30 @@ def done():
                 ["98d2714", "System guide version 4"],
                 ["9680cb3", "ESP32 pins moved: pumps D18/D19/D21, DHT22 D12, HC-SR04 TRIG D33 / "
                             "ECHO D32"],
-                ["(this version)", "System guide version 5: safe pin layout (no strapping pins; "
-                                   "EC/pH on ADC1 GPIO32/33, DHT22 GPIO4, HC-SR04 GPIO16/17)"]], [0.26, 0.74])
+                ["8e067ea · 58c1124", "System guide version 5: safe pin layout (no strapping pins; "
+                                      "EC/pH on ADC1 GPIO32/33, DHT22 GPIO4, HC-SR04 GPIO16/17)"],
+                ["2ee2f5d · d93383c", "EC: built-in 1413 K from the measured buffer; calibration "
+                                      "wizard recovers after an ESP32 restart"],
+                ["283c29b → b8dfc1d", "pH as slope × V + offset from ph7/ph4, defaults from this "
+                                      "probe, ADC-limit warning"],
+                ["7094e24 · bbc980e", "Air Temperature tile reads Cold (blue) / Stable / Hot"],
+                ["c6a8947", "Sensor gap filling in the firmware; dashboard greys held values"],
+                ["(this version)", "System guide version 6"]], [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],
-              ["ESP32 + bridge", "Running · started by itself after a Pi reboot (log #0043, 29 Sep)"],
-              ["Firmware", f"Updated · new pin layout (7 Oct). Rewire, re-flash "
-                           f"{c('Full_code.ino')}, then check every sensor and pump"],
+              ["ESP32 + bridge", "Running · log #0117 (15 Oct)"],
+              ["Firmware", "Updated · gap-filling build (c6a8947) flashed and checked on 15 Oct: "
+                           "temperature, humidity and level read on every row, no false Tank LOW"],
               ["Mosquitto", "Running"],
               ["MaixCAM", "Running · photos reach the Pi; aim the camera at the plants"],
               ["Stage model", f"Updated {MODEL_DATE} · retrained on {M['photos']} photos; restart "
                               f"{c('hydro-vision')} to load it"],
               ["vision.py / dashboard", "Running · services enabled, start at every boot"],
-              ["pH probe", "Check · still reads 19.71 on 29 Sep: disconnected or not in solution"],
-              ["Water level", "Check · still no echo from the HC-SR04 on 29 Sep (level empty)"],
-              ["EC", f"Check · 0.0 with {c('ec_low')} on 29 Sep (probe dry or not connected); "
-                     "Pumps A/B dose nonstop while it reads this"]]
+              ["Air temp / humidity", "OK · 23.5 °C, 56 % on 15 Oct (below the 25–36 °C band: Cold)"],
+              ["pH probe", "OK · 6.2–6.3 and steady on 15 Oct"],
+              ["Water level", "OK · 30 % (distance 15.9 cm) and steady on 15 Oct"],
+              ["EC", f"Check · 0.0 with {c('ec_low')} on 15 Oct while the sampling pump was off; "
+                     f"re-check with {c('sampleon')}. Pumps A/B dose nonstop while it reads this"]]
     s += table(status, [0.26, 0.74],
                shade={i: ("blue" if r[1].startswith("Updated") else "amber")
                       for i, r in enumerate(status)
@@ -706,6 +724,12 @@ def run():
          P(f"Upload {c('firmware/Full_code/Full_code.ino')} to the ESP32 with the Arduino IDE "
            "(board: ESP32 Dev Module; libraries: DHT sensor library and Adafruit Unified Sensor; no EC "
            "library is needed, the EC maths and calibration are built into the sketch). Then on the Pi:"),
+         P(f"<b>Re-flashing later:</b> always upload the latest {c('Full_code.ino')} from GitHub "
+           f"(pull first; an old copy on the upload computer looks like a flash that did not work). "
+           f"If you upload from the Pi, run {c('sudo systemctl stop hydro-bridge')} first, because the "
+           f"bridge holds the serial port. After the upload, {c('journalctl -u hydro-bridge -f')} "
+           "should show \"# Hydro ESP32 ready\" and \"# Start delay: sampling pump in 30 s, Pump A/B "
+           "in 60 s\".", small),
          code("sudo apt install mosquitto mosquitto-clients python3-serial python3-paho-mqtt python3-pil\n"
               "cd ~/hydro\n"
               "sudo cp backend/mosquitto/local.conf /etc/mosquitto/conf.d/\n"
@@ -826,7 +850,19 @@ def calibration():
                 [f"{c('ec_low: true')}", "Solution below about 0.6 mS/cm (normal for plain water)"],
                 ["Water level empty", "HC-SR04 gets no echo: check wiring, the ECHO divider, and "
                                       "that it faces the water"],
-                [f"{c('temp_ok: null')}", "No DHT22 reading: check the DHT22 wiring (DATA on D4) and pull-up resistor"],
+                [f"{c('temp_ok: null')}", "No DHT22 reading: check the DHT22 wiring (DATA on D4) and pull-up resistor. "
+                 "Blank for the first ~12 s after the ESP32 starts is normal (sensor warm-up)"],
+                ["Readings still blank or jumpy after a flash", f"The old sketch is still on the ESP32. "
+                 f"Check the uploaded file contains {c('readDistanceHeld')} and {c('LOW_CONFIRM')}; with "
+                 "the latest code, temperature and level only go blank after 20 s without a good reading"],
+                ["Pumps switch to MANUAL by themselves", f"Something sent {c('pumpaoff')} / {c('sampleoff')} "
+                 f"on {c('hydro/cmd')}: look for {c('[cmd]')} lines in {c('journalctl -u hydro-bridge')}, "
+                 f"then send {c('pumpauto')} and {c('sampleon')}"],
+                ["SD card almost full", f"{c('df -h /')}. Safe to clear: Trash, Downloads, old "
+                 f"{c('~/.vscode-server/cli/servers/Stable-*')} (keep the newest), "
+                 f"{c('sudo journalctl --vacuum-size=100M')}, {c('sudo apt clean')}, "
+                 f"{c('npm cache clean --force')}. Keep {c('~/hydro')}, {c('.venv')} and "
+                 f"{c('data/logs')}"],
                 ["Dashboard shows old data", "Hard refresh (Ctrl+Shift+R). If the header says \"Live "
                  "link down\", the browser can't reach MQTT on port 9001: restart the browser or turn "
                  "off HTTPS-Only for the site. The camera photo still updates via HTTP"],

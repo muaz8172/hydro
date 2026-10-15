@@ -169,7 +169,7 @@
   button.tile:hover { background: var(--card); border-color: var(--line-strong); }
   button.tile:active { transform: none; }
   .tile.wide { grid-column: span 2; }
-  .tile .top { display: flex; justify-content: space-between; align-items: center; min-height: 20px; font-size: 13px; color: var(--muted); }
+  .tile .top { display: flex; flex-wrap: wrap; gap: 4px 8px; justify-content: space-between; align-items: center; min-height: 20px; font-size: 13px; color: var(--muted); }
   .tile .top .dot { width: 6px; height: 6px; }
   .value { font: 30px/1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
   .value small { font: 13px var(--sans); color: var(--muted); margin-left: 6px; letter-spacing: 0; }
@@ -509,7 +509,7 @@ const CAM_STALE_MS = 30000;      // camera photo older than this -> "Camera: no 
 const SENSORS = [
   { key: "ph",        label: "pH",       unit: "",      band: [5.5, 6.5], scale: [4.5, 7.5], dec: 2, raw: ["po_mv"] },
   { key: "ec",        label: "EC",       unit: "mS/cm", band: [1.2, 1.8], scale: [0.6, 2.4], dec: 2, raw: ["ec_mv"] },
-  { key: "temp",      label: "Air",      unit: "°C",    band: [25, 36],   scale: [20, 40],   dec: 1, raw: [] },
+  { key: "temp",      label: "Air Temperature", unit: "°C", band: [25, 36], scale: [20, 40], dec: 1, raw: [] },
   { key: "hum",       label: "Humidity", unit: "%",     band: [50, 75],   scale: [30, 90],   dec: 1, raw: [] },
 ];
 const PUMPS = [
@@ -629,7 +629,7 @@ function setDot(id, state, text) {
 }
 // tile flag: a green dot when fine, otherwise a short tag
 function setFlag(t, cls, tag, text) {
-  if (cls === "good") t.flag.innerHTML = '<i class="dot ok"></i>';
+  if (cls === "good" && !tag) t.flag.innerHTML = '<i class="dot ok"></i>';
   else if (!tag) t.flag.innerHTML = '<i class="dot"></i>';
   else { t.flag.innerHTML = `<span class="badge ${cls}"></span>`; t.flag.firstChild.textContent = tag; }
   t.mark.className = "mark" + (cls === "warn" || cls === "bad" ? " " + cls : "");
@@ -661,6 +661,12 @@ function onSensors(d) {
       t.mark.style.left = t.pct(v) + "%";
       const [lo, hi] = s.band, edge = (hi - lo) * 0.1;
       if (s.key === "level_pct" && d.level_low) setFlag(t, "bad", "Tank low", "Tank low: pumps stopped");
+      // Air temperature reads as Cold / Stable / Hot; amber near the band edges as an early warning
+      else if (s.key === "temp") {
+        if (v < lo) setFlag(t, "bad", "Cold", "Cold");
+        else if (v > hi) setFlag(t, "bad", "Hot", "Hot");
+        else setFlag(t, v < lo + edge || v > hi - edge ? "warn" : "good", "Stable", "Stable");
+      }
       else if (v < lo) setFlag(t, "bad", "Low", "Low");
       else if (v > hi) setFlag(t, "bad", "High", "High");
       else if (s.key !== "level_pct" && v > hi - edge) setFlag(t, "warn", "Drift", "Drifting high");
@@ -847,7 +853,7 @@ pollLive();
 const G_SERIES = [
   { key: "ph",   label: "pH",       unit: "",      band: [5.5, 6.5], scale: [5.0, 7.0], limit: [3, 9],  dec: 2 },
   { key: "ec",   label: "EC",       unit: "mS/cm", band: [1.2, 1.8], scale: [0.8, 2.0], limit: [0, 4],  dec: 2 },
-  { key: "temp", label: "Air temp", unit: "°C",    band: [25, 36],   scale: [20, 40],   limit: [0, 50], dec: 1 },
+  { key: "temp", label: "Air Temperature", unit: "°C", band: [25, 36],   scale: [20, 40],   limit: [0, 50], dec: 1 },
   { key: "hum",  label: "Humidity", unit: "%",     band: [50, 75],   scale: [40, 85],   limit: [0, 100], dec: 1 },
 ];
 const RANGE_NOTE = { "1h": "Last hour · every 2 s", "24h": "Last 24 h · 1-min averages", "7d": "Last 7 days · 10-min averages" };

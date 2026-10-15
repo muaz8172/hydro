@@ -18,7 +18,7 @@ from reportlab.platypus import (Flowable, KeepTogether, PageBreak, Paragraph, Si
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), "Hydro_System_Guide.pdf")
-VERSION = "6"
+VERSION = "7"
 DATE = "15 October 2026"
 MODEL_DATE = "29 September 2026"   # last stage-model retrain
 
@@ -306,7 +306,11 @@ def cover():
     s += [Spacer(1, 8)]
     s += callout(
         f"<b>What's new in version {VERSION}</b><br/>"
-        "• <b>Steadier sensor readings (gap filling):</b> the DHT22 is read every 4 s, corrupt "
+        "• <b>Dashboard on the HDMI monitor:</b> the Pi now boots straight into the dashboard, "
+        "full screen in Firefox kiosk mode, with no keyboard or mouse needed. The screen never "
+        f"blanks or locks, and Firefox reopens by itself if it closes. Control it over SSH with "
+        f"{c('hydro-kiosk reload|off|on')}. See section 5.5.<br/>"
+        "• Version 6: <b>Steadier sensor readings (gap filling):</b> the DHT22 is read every 4 s, corrupt "
         "jumps (e.g. a reading of exactly half the real value) are dropped, and the last good "
         "temperature, humidity and water level are held for 20 s instead of going blank. "
         "Ultrasonic ghost echoes are ignored and Tank LOW needs 3 low readings in a row, so one "
@@ -696,7 +700,9 @@ def done():
                                       "probe, ADC-limit warning"],
                 ["7094e24 · bbc980e", "Air Temperature tile reads Cold (blue) / Stable / Hot"],
                 ["c6a8947", "Sensor gap filling in the firmware; dashboard greys held values"],
-                ["(this version)", "System guide version 6"]], [0.26, 0.74])
+                ["b993736", "System guide version 6"],
+                ["(this version)", "HDMI dashboard kiosk at boot; system guide version 7"]],
+               [0.26, 0.74])
     s += [H2("Current status")]
     status = [["Part", "State"],
               ["ESP32 + bridge", "Running · log #0117 (15 Oct)"],
@@ -707,6 +713,8 @@ def done():
               ["Stage model", f"Updated {MODEL_DATE} · retrained on {M['photos']} photos; restart "
                               f"{c('hydro-vision')} to load it"],
               ["vision.py / dashboard", "Running · services enabled, start at every boot"],
+              ["HDMI monitor", "Updated · dashboard full screen at boot (1920×1080), checked "
+                               "on 15 Oct: live data connected, screen never blanks"],
               ["Air temp / humidity", "OK · 23.5 °C, 56 % on 15 Oct (below the 25–36 °C band: Cold)"],
               ["pH probe", "OK · 6.2–6.3 and steady on 15 Oct"],
               ["Water level", "OK · 30 % (distance 15.9 cm) and steady on 15 Oct"],
@@ -792,8 +800,31 @@ def run():
                 [".venv/bin/python docs/guide/build_guide.py", "Rebuild this guide (PDF)"],
                 ["ls -lt ~/hydro/data/logs | head", "Newest sensor CSV logs"],
                 ["curl http://10.122.173.1:8080/status", "Is the camera app answering?"],
-                ["sudo systemctl restart hydro-bridge", "Restart the bridge (starts a new CSV log)"]],
+                ["sudo systemctl restart hydro-bridge", "Restart the bridge (starts a new CSV log)"],
+                ["hydro-kiosk reload", "Reopen the dashboard on the HDMI monitor (after an update)"],
+                ["hydro-kiosk off  /  hydro-kiosk on", "Close the monitor dashboard (stays closed "
+                                                        "after reboots) / show it again"]],
                [0.52, 0.48], mono_cols=(0,))
+    s += [H2("5.5 Dashboard on the HDMI monitor")]
+    s += [P("With only a monitor plugged into the Pi (no keyboard or mouse), the Pi logs in by "
+            "itself and shows the dashboard full screen. The desktop shows for a few seconds at "
+            "boot, then Firefox covers it in kiosk mode (no tabs or address bar).")]
+    s += bullets([
+        f"Files are in {c('backend/kiosk/')}. Install once from a desktop login (no sudo): "
+        f"{c('backend/kiosk/install.sh')}.",
+        f"A GNOME autostart entry starts the {c('hydro-kiosk')} user service, which waits for "
+        f"the dashboard on port 8000, then runs Firefox with its own profile "
+        f"({c('~/snap/firefox/common/hydro-kiosk')}) so no restore, welcome or update prompts "
+        "appear. If Firefox closes, the service reopens it after 3 s.",
+        "Screen blanking, the lock screen, sleep and notification banners are turned off, and "
+        "the update and Ubuntu Pro popups are hidden.",
+        f"The Pi power-supply popup ({c('pemmican')}) is turned off with the files in "
+        f"{c('~/.config/pemmican/')}. It waits for a mouse click, and without a mouse it blocked "
+        "the desktop start-up so Firefox hung for minutes.",
+        f"To get the normal desktop back: {c('hydro-kiosk off')}, or delete "
+        f"{c('~/.config/autostart/hydro-kiosk.desktop')}.",
+        f"Zoom: change {c('layout.css.devPixelsPerPx')} in {c('backend/kiosk/kiosk-run.sh')} "
+        f"(e.g. 1.25 for a large TV), then {c('hydro-kiosk reload')}."])
     return s + [PageBreak()]
 
 
@@ -890,6 +921,10 @@ def next_steps():
         f"{c('hydro/cmd')} (the dashboard's Calibration tab uses the same topic). Add a Mosquitto "
         "password and an access list before using the dashboard from other devices.",
         f"<b>MaixCAM factory password.</b> Change it with {c('passwd')} (section 5.1).",
+        "<b>Power supply.</b> The Pi reports a 900 mA USB limit, meaning the supply is not the "
+        "official 5 A one, so the ESP32 and MaixCAM share limited USB power. No under-voltage "
+        f"was seen on 15 Oct. The desktop warning is now off (section 5.5), so check "
+        f"{c('dmesg | grep -i voltage')} if devices disconnect, or use the official 27 W supply.",
         "<b>Relay wiring.</b> Keep relay contacts and any mains wiring in a closed box away from "
         "water."])
     s += [H2("Roadmap")]

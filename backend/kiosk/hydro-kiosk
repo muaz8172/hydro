@@ -1,0 +1,14 @@
+#!/bin/bash
+# Control the dashboard on the HDMI monitor (works over SSH).
+#   hydro-kiosk reload   reopen the dashboard (after a dashboard update)
+#   hydro-kiosk off      close it and keep it closed after reboots
+#   hydro-kiosk on       show it again
+#   hydro-kiosk status
+OFF="$HOME/.config/hydro-kiosk.off"
+case "$1" in
+    reload) systemctl --user restart hydro-kiosk.service ;;
+    off)    touch "$OFF"; systemctl --user stop hydro-kiosk.service ;;
+    on)     rm -f "$OFF"; systemctl --user start hydro-kiosk.service ;;
+    status) systemctl --user status hydro-kiosk.service --no-pager ;;
+    *)      echo "usage: hydro-kiosk reload|off|on|status"; exit 1 ;;
+esac

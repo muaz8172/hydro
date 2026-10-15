@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Hydro dashboard kiosk
+Comment=Show the hydro dashboard full screen on the monitor
+Exec=systemctl --user start hydro-kiosk.service
+X-GNOME-Autostart-enabled=true
+NoDisplay=true

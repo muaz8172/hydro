@@ -1,0 +1,10 @@
+[Unit]
+Description=Hydro dashboard full screen on the HDMI monitor (Firefox kiosk)
+# Started by ~/.config/autostart/hydro-kiosk.desktop once GNOME is up.
+# "hydro-kiosk off" creates this file to keep the kiosk from starting.
+ConditionPathExists=!%h/.config/hydro-kiosk.off
+
+[Service]
+ExecStart=/home/hydro/hydro/backend/kiosk/kiosk-run.sh
+Restart=always
+RestartSec=3

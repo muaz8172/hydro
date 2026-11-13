@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>01 Introduction</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .feat { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5mm; }
+  .feat .card { padding: 3mm 4mm; }
+  .feat .card h3 { margin-top: 0; }
+  .feat .card p { font-size: 9pt; margin: 0; }
+  .comp td:first-child { font-weight: 600; color: var(--ink); width: 44mm; }
+  .road td:first-child { width: 20mm; }
+</style></head><body>
+
+<!-- ============ COVER ============ -->
+<section class="page cover">
+  <div class="band">
+    <div class="num">01</div>
+    <div class="kicker">Hydro · Innovation 2026 · Document 1 of 5</div>
+    <h1>Indoor Vertical Garden<br>Monitoring &amp; Automation System</h1>
+    <p>Introduction to a hydroponic lettuce system that measures its own water and air, doses nutrients by itself,
+       watches the plants with a camera, and shows everything on an offline dashboard.</p>
+  </div>
+  <div class="body">
+    <img src="../screenshots/dashboard_overview.jpg" style="width:100%;height:108mm;object-fit:cover;object-position:top;border-radius:10px;border:1px solid var(--line-strong);display:block">
+    <p class="small" style="margin-top:2mm">Live Monitoring tab of the dashboard (screenshot taken 13 Nov 2026 with simulated sensor data).</p>
+    <div class="meta">
+      <div><small>Team</small><span>UniKL MFI Robotic Society</span></div>
+      <div><small>Crop</small><span>Lettuce (<i>Lactuca sativa</i>)</span></div>
+      <div><small>Updated</small><span>13 November 2026</span></div>
+    </div>
+  </div>
+  <div class="foot"><span>Hydro · 01 Introduction</span><span>github.com/muaz8172/hydro</span></div>
+</section>
+
+<!-- ============ PAGE 2 ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 01 Introduction</span><span>Background, problem and objectives</span></div>
+  <span class="sec">1 · Background</span>
+  <h1>Why this project</h1>
+  <p class="lead">Hydroponic lettuce grows fast and clean, but only if the nutrient water stays in a narrow range.
+     Checking it by hand every day is slow and easy to forget. This project lets the system check and correct itself.</p>
+
+  <h2>Problem statement</h2>
+  <ul>
+    <li><b>Nutrient strength drifts.</b> Plants take up nutrients and water at different rates, so EC (nutrient strength) and pH move every day.
+        Lettuce does best at <b>EC 1.2–1.8 mS/cm</b> and <b>pH 5.5–6.5</b>.</li>
+    <li><b>Manual checks are infrequent.</b> A handheld meter gives one reading a day; a problem that starts at night is found the next morning.</li>
+    <li><b>Pumps can run dry.</b> If the tank empties while a pump is running, the pump is damaged.</li>
+    <li><b>Plant health is judged by eye.</b> Yellowing leaves and slow growth are noticed late and are not recorded.</li>
+    <li><b>No internet in the grow room.</b> Cloud dashboards are not an option; everything must work offline.</li>
+  </ul>
+
+  <h2>Objectives</h2>
+  <table>
+    <tr><th style="width:9mm">#</th><th>Objective</th><th style="width:52mm">How it is met</th></tr>
+    <tr><td>1</td><td>Measure air temperature, humidity, EC, pH and water level continuously.</td><td>ESP32 with DHT22, EC, pH and ultrasonic sensors, one reading every 2 s</td></tr>
+    <tr><td>2</td><td>Keep EC and pH inside the lettuce target range automatically.</td><td>Pump A + Pump B auto control in the firmware</td></tr>
+    <tr><td>3</td><td>Protect the pumps from running dry.</td><td>Tank-low stop below 20 % water level</td></tr>
+    <tr><td>4</td><td>Record every reading for later analysis.</td><td>CSV session logs on the Raspberry Pi 5</td></tr>
+    <tr><td>5</td><td>Check plant health and growth stage with a camera.</td><td>MaixCAM photos, leaf-colour check and an AI growth-stage model</td></tr>
+    <tr><td>6</td><td>Show live values, history and calibration on a dashboard, fully offline.</td><td>MQTT (Mosquitto) + web dashboard on port 8000, HDMI kiosk</td></tr>
+  </table>
+
+  <h2>Scope</h2>
+  <div class="grid2">
+    <div class="card"><h3 style="margin-top:0">In scope</h3>
+      <ul class="small" style="color:var(--text);margin:0">
+        <li>One hydroponic rack with one nutrient tank</li>
+        <li>Sensing, nutrient dosing, dry-run protection</li>
+        <li>Data logging, camera vision, local dashboard</li>
+        <li>Calibration of EC, pH and tank level from the dashboard</li>
+      </ul></div>
+    <div class="card"><h3 style="margin-top:0">Not (yet) in scope</h3>
+      <ul class="small" style="color:var(--text);margin:0">
+        <li>Heating or cooling (air temperature is only reported)</li>
+        <li>Water temperature compensation for EC (DS18B20 planned)</li>
+        <li>Grow-light control (planned, via relay)</li>
+        <li>Remote access over the internet</li>
+      </ul></div>
+  </div>
+  <div class="foot"><span>Hydro · 01 Introduction</span><span>2</span></div>
+</section>
+
+<!-- ============ PAGE 3 ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 01 Introduction</span><span>System at a glance</span></div>
+  <span class="sec">2 · System at a glance</span>
+  <h1>What the system is made of</h1>
+  <p class="lead">An ESP32 reads the sensors and drives the pumps. A Raspberry Pi 5 logs the data, runs the camera AI and serves the dashboard.
+     They talk over a USB cable and a local MQTT broker. No Wi-Fi or internet is needed at runtime.</p>
+
+  <table class="comp">
+    <tr><th>Component</th><th>Role</th></tr>
+    <tr><td>ESP32 Dev Module</td><td>Reads all sensors, runs pump auto control and tank-low protection, sends one JSON line every 2 s over USB serial (115200 baud).</td></tr>
+    <tr><td>DHT22</td><td>Air temperature and humidity (status band 25–36 °C).</td></tr>
+    <tr><td>EC sensor (EC V2.1)</td><td>Nutrient strength in mS/cm, two-point calibration (1413 µS/cm, 12.88 mS/cm).</td></tr>
+    <tr><td>pH sensor (PH-4502C)</td><td>Acidity of the nutrient water, two-point calibration (pH 7, pH 4).</td></tr>
+    <tr><td>HC-SR04</td><td>Water level in the tank (cm and %), mounted above the water facing down.</td></tr>
+    <tr><td>2 × 2-channel relay</td><td>Pump A (Nutrient A / Pump In), Pump B (Nutrient B / Pump Out), sampling pump (Pump N).</td></tr>
+    <tr><td>Raspberry Pi 5</td><td>Serial → MQTT bridge, CSV logs, history API, camera vision, dashboard, HDMI kiosk.</td></tr>
+    <tr><td>Sipeed MaixCAM</td><td>Plant camera, connected to the Pi by USB-C as a network adapter; serves a photo every 10 s.</td></tr>
+  </table>
+
+  <h2>Key features</h2>
+  <div class="feat">
+    <div class="card"><h3>Automatic nutrient dosing</h3><p>Pump A and Pump B run until EC is 1.2–1.8 mS/cm and pH is 5.5–6.5, then stop. Start delay 60 s after boot.</p></div>
+    <div class="card"><h3>Dry-run protection</h3><p>All pumps are forced off when the water level is below 20 % (3 low readings in a row), in auto and manual mode.</p></div>
+    <div class="card"><h3>Plant vision + AI</h3><p>Leaf-colour health check and a MobileNetV3 growth-stage model (86 % test accuracy, 10 ms per photo on the Pi 5).</p></div>
+    <div class="card"><h3>Offline dashboard</h3><p>Live tiles, 1 h / 24 h / 7 d history, CSV export and guided calibration. Shown full screen on the HDMI monitor at boot.</p></div>
+  </div>
+
+  <h2>Project status</h2>
+  <table class="road">
+    <tr><th>Status</th><th>Item</th></tr>
+    <tr><td><span class="pill">Done</span></td><td>ESP32 firmware (DHT22, EC, pH, HC-SR04), pump auto control, tank-low stop, relay test</td></tr>
+    <tr><td><span class="pill">Done</span></td><td>USB serial → MQTT bridge, CSV session logs, history API, dashboard (3 tabs), HDMI kiosk</td></tr>
+    <tr><td><span class="pill">Done</span></td><td>MaixCAM camera, leaf-colour health check, 88-photo dataset, growth-stage model</td></tr>
+    <tr><td><span class="pill warn">Next</span></td><td>More own-camera photos and retrain · MQTT password · DS18B20 water temperature · grow-light relay · RTC battery</td></tr>
+  </table>
+  <div class="callout">The other documents in this set: <b>02</b> ESP32 Pin Configuration · <b>03</b> Dataset ·
+    <b>04</b> System Diagram &amp; Flowchart · <b>05</b> Dashboard Overview. The full technical guide is <code>docs/pdf/Hydro_System_Guide.pdf</code>.</div>
+  <div class="foot"><span>Hydro · 01 Introduction</span><span>3</span></div>
+</section>
+</body></html>

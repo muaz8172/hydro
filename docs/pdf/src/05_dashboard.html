@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>05 Dashboard Overview</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .shot { position: relative; margin: 0 0 3mm; }
+  .shot img { width: 100%; display: block; border-radius: 8px; border: 1px solid var(--line-strong); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  .shot .n { position: absolute; transform: translate(-50%, -50%); width: 6.2mm; height: 6.2mm; border-radius: 50%;
+             background: #1f3a22; color: #fff; font-size: 8.4pt; font-weight: 700; display: flex; align-items: center; justify-content: center;
+             border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6mm 6mm; }
+  .key { display: grid; grid-template-columns: 6.2mm 1fr; gap: 2.4mm; font-size: 8.8pt; align-items: start; }
+  .key i { font-style: normal; width: 6.2mm; height: 6.2mm; border-radius: 50%; background: #1f3a22; color: #fff; font-size: 8.4pt;
+           font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .key b { color: var(--ink); }
+  .note { font-size: 8pt; color: var(--muted); margin: -1mm 0 3mm; }
+</style></head><body>
+
+<!-- ============ PAGE 1: Live Monitoring ============ -->
+<section class="page">
+  <div class="hero">
+    <div class="num">05</div>
+    <div class="kicker">Hydro · Innovation 2026 · Document 5 of 5</div>
+    <h1>Dashboard Overview</h1>
+    <p>A tour of the offline web dashboard: Live Monitoring, Sensor History and Calibration. It runs on the Raspberry Pi 5 and opens full screen on the HDMI monitor at boot.</p>
+  </div>
+  <span class="sec">Tab 1 · Live Monitoring</span>
+  <h2 style="margin-top:0">What is happening right now</h2>
+  <div class="shot">
+    <img src="../screenshots/dashboard_overview.jpg">
+    <span class="n" style="left:35.4%;top:5.1%">1</span>
+    <span class="n" style="left:69%;top:5.1%">2</span>
+    <span class="n" style="left:4.8%;top:14%">3</span>
+    <span class="n" style="left:20%;top:92.5%">4</span>
+    <span class="n" style="left:62%;top:15.5%">5</span>
+    <span class="n" style="left:90%;top:28%">6</span>
+    <span class="n" style="left:85%;top:39.2%">7</span>
+    <span class="n" style="left:70%;top:55.5%">8</span>
+    <span class="n" style="left:90%;top:85%">9</span>
+  </div>
+  <p class="note">Screenshot taken 13 Nov 2026 by running the dashboard on a PC with simulated sensor data and a dataset photo; on the rack the same page shows live values.</p>
+  <div class="keys">
+    <div class="key"><i>1</i><div><b>Tabs</b>: Live Monitoring, Sensor History, Calibration.</div></div>
+    <div class="key"><i>2</i><div><b>Status chips</b>: MQTT link, ESP32 and camera connected or not.</div></div>
+    <div class="key"><i>3</i><div><b>Live plant photo</b> from the MaixCAM, refreshed every 10 s.</div></div>
+    <div class="key"><i>4</i><div><b>Plant result</b>: health, growth stage, size, AI confidence, <b>Save photo</b>.</div></div>
+    <div class="key"><i>5</i><div><b>Sensor tiles</b>: pH, EC, air temperature (Cold / Stable / Hot) with the target band.</div></div>
+    <div class="key"><i>6</i><div><b>Pump mode</b>: Auto or Manual, and whether the tank is OK.</div></div>
+    <div class="key"><i>7</i><div><b>Pumps</b>: Nutrient A, Nutrient B, Sampling, each ON / OFF.</div></div>
+    <div class="key"><i>8</i><div><b>Plant vision</b>: canopy %, yellowing %, green index.</div></div>
+    <div class="key"><i>9</i><div><b>Water tank</b>: level %, the 20 % low line, water height, distance to surface.</div></div>
+  </div>
+  <div class="foot"><span>Hydro · 05 Dashboard Overview</span><span>1</span></div>
+</section>
+
+<!-- ============ PAGE 2: Sensor History ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 05 Dashboard Overview</span><span>Sensor History tab</span></div>
+  <span class="sec">Tab 2 · Sensor History</span>
+  <h1>How the system has been doing</h1>
+  <p class="lead">History comes from the CSV session logs on the Pi through <code>server.py</code>. Pick a range, read the trends, export the data.</p>
+  <div class="shot">
+    <img src="../screenshots/dashboard_graphs.jpg">
+    <span class="n" style="left:14.6%;top:12%">1</span>
+    <span class="n" style="left:86.4%;top:12%">2</span>
+    <span class="n" style="left:10%;top:18.8%">3</span>
+    <span class="n" style="left:14%;top:47.4%">4</span>
+    <span class="n" style="left:43%;top:47.5%">5</span>
+    <span class="n" style="left:81%;top:47.4%">6</span>
+    <span class="n" style="left:81%;top:87.7%">7</span>
+  </div>
+  <div class="keys">
+    <div class="key"><i>1</i><div><b>Range</b>: last 1 h (every 2 s), 24 h (1-min averages) or 7 days (10-min averages).</div></div>
+    <div class="key"><i>2</i><div><b>Table</b> shows the numbers; <b>CSV</b> downloads the log rows for the range.</div></div>
+    <div class="key"><i>3</i><div><b>Charts</b>: pH, EC, air temperature, humidity. The shaded band is the target; hatched gaps mean no data. Hover one chart to see the same moment on all four.</div></div>
+    <div class="key"><i>4</i><div><b>Time in target</b>: share of the range each value spent inside its band.</div></div>
+    <div class="key"><i>5</i><div><b>Nutrient pumps</b>: minutes ON per time slot, plus the average of each sensor.</div></div>
+    <div class="key"><i>6</i><div><b>Water level</b> over the range.</div></div>
+    <div class="key"><i>7</i><div><b>Plant stage</b> strip from the camera log: seedling, vegetative, matured or uncertain.</div></div>
+  </div>
+  <h2>Target bands used for shading</h2>
+  <table>
+    <tr><th>Value</th><th>Target band</th><th>Chart scale</th><th>Colour</th></tr>
+    <tr><td>pH</td><td>5.5 – 6.5</td><td>5.0 – 7.0</td><td><span class="swatch" style="background:var(--c-ph)"></span>violet</td></tr>
+    <tr><td>EC</td><td>1.2 – 1.8 mS/cm</td><td>0.8 – 2.0</td><td><span class="swatch" style="background:var(--c-ec)"></span>cyan</td></tr>
+    <tr><td>Air temperature</td><td>25 – 36 °C</td><td>20 – 40</td><td><span class="swatch" style="background:var(--c-temp)"></span>pink</td></tr>
+    <tr><td>Humidity</td><td>50 – 75 %</td><td>40 – 85</td><td><span class="swatch" style="background:var(--c-hum)"></span>blue</td></tr>
+  </table>
+  <div class="foot"><span>Hydro · 05 Dashboard Overview</span><span>2</span></div>
+</section>
+
+<!-- ============ PAGE 3: Calibration + how to open ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 05 Dashboard Overview</span><span>Calibration tab and access</span></div>
+  <span class="sec">Tab 3 · Calibration</span>
+  <h1>Guided sensor calibration</h1>
+  <p class="lead">Step-by-step calibration for the EC probe, the pH probe and the tank level. Commands go to the ESP32 on <code>hydro/cmd</code>; its replies appear on the page.</p>
+  <div class="shot">
+    <img src="../screenshots/dashboard_calibration.jpg">
+    <span class="n" style="left:16%;top:16.5%">1</span>
+    <span class="n" style="left:80.5%;top:28%">2</span>
+    <span class="n" style="left:51%;top:36%">3</span>
+    <span class="n" style="left:72.5%;top:35%">4</span>
+    <span class="n" style="left:14.5%;top:62.7%">5</span>
+  </div>
+  <div class="keys">
+    <div class="key"><i>1</i><div><b>Choose a sensor</b>: EC (~5 min), pH (~10 min) or tank level (~15 min).</div></div>
+    <div class="key"><i>2</i><div><b>Step bar</b>: e.g. EC: Start → 1413 µS/cm → Save → Restart → 12.88 mS/cm → Save → Done.</div></div>
+    <div class="key"><i>3</i><div><b>Instructions + send button</b>. Capture buttons stay disabled until the reading is steady.</div></div>
+    <div class="key"><i>4</i><div><b>ESP32 replies</b>, e.g. <code># EC K values written to flash</code>.</div></div>
+    <div class="key"><i>5</i><div><b>Stored calibration</b> (<code>status</code>) and a hold-to-reset for pH.</div></div>
+  </div>
+
+  <h2>Opening the dashboard</h2>
+  <table>
+    <tr><th style="width:44mm">Where</th><th>How</th></tr>
+    <tr><td>HDMI monitor on the Pi</td><td>Opens by itself at boot (Firefox kiosk, screen never blanks)</td></tr>
+    <tr><td>Browser on the Pi</td><td><code>http://localhost:8000</code></td></tr>
+    <tr><td>Phone / laptop</td><td><code>http://&lt;pi-ip&gt;:8000</code> on the same network</td></tr>
+  </table>
+  <h2>If something looks wrong</h2>
+  <table>
+    <tr><th style="width:44mm">On screen</th><th>Meaning / fix</th></tr>
+    <tr><td>"Live link down (MQTT :9001)"</td><td>Browser cannot reach Mosquitto's websocket. Tiles and calibration need it; the photo still updates over HTTP.</td></tr>
+    <tr><td>Greyed-out value</td><td>A held value: the last good reading, kept up to 20 s while the sensor misses a read.</td></tr>
+    <tr><td>Camera not connected</td><td>Check the USB-C cable and that the MaixCAM shows the Hydro Cam preview (<code>ping 10.122.173.1</code>).</td></tr>
+  </table>
+  <div class="callout warn">The Calibration tab can send commands to the ESP32 and MQTT has no password yet, so anyone on the same network could do the same. Add a Mosquitto password before using the dashboard on a shared network.</div>
+  <div class="foot"><span>Hydro · 05 Dashboard Overview</span><span>3</span></div>
+</section>
+</body></html>

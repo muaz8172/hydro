@@ -11,7 +11,17 @@ ESP32 --USB serial (115200)--> bridge.py --> Mosquitto (localhost)
                                  +--> data/logs/log_NNNN_<date>_<time>.csv  (new file per connection)
 ```
 
-**Full system guide (PDF):** [`docs/Hydro_System_Guide.pdf`](docs/Hydro_System_Guide.pdf): how it works, what has been built, and how to run it.
+**Full system guide (PDF):** [`docs/pdf/Hydro_System_Guide.pdf`](docs/pdf/Hydro_System_Guide.pdf): how it works, what has been built, and how to run it.
+
+**Project documents (PDF):** in [`docs/pdf/`](docs/pdf/)
+
+| # | Document | Contents |
+|---|---|---|
+| 1 | [Introduction](docs/pdf/01_Introduction.pdf) | Problem, objectives, scope, components, key features, status |
+| 2 | [ESP32 Pin Configuration](docs/pdf/02_ESP32_Pin_Configuration.pdf) | Pinout diagram, pin table, voltage dividers, power rails, firmware settings |
+| 3 | [Dataset](docs/pdf/03_Dataset.pdf) | Lettuce growth-stage photos, preparation, model results, sensor and camera logs |
+| 4 | [System Diagram & Flowchart](docs/pdf/04_System_Diagram_and_Flowchart.pdf) | ESP32 → USB → MQTT → dashboard block diagram, MQTT topics, firmware flowcharts |
+| 5 | [Dashboard Overview](docs/pdf/05_Dashboard_Overview.pdf) | Annotated screenshots of Live Monitoring, Sensor History and Calibration |
 
 ---
 
@@ -37,7 +47,11 @@ hydro/
 ├── maixcam/hydro_cam/         # MaixCAM app (runs ON the camera): preview + photo server
 ├── dataset/lettuce_growth_stages/  # Lettuce photos by growth stage (seedling / vegetative / matured)
 ├── dataset/lettuce_224/       # Same photos as 224x224 JPEG + labels.csv (stage + size)
-├── docs/                      # Dashboard design plan, system guide PDF
+├── docs/                      # Dashboard design plan, PDF builders
+│   ├── pdf/                   #   all PDFs: 01-05 project documents + Hydro_System_Guide.pdf
+│   │   ├── src/               #   HTML sources + render.py for the 01-05 PDFs
+│   │   └── screenshots/       #   dashboard screenshots used in the PDFs
+│   └── guide/build_guide.py   #   builds pdf/Hydro_System_Guide.pdf
 ├── Circuit Diagram/           # Wiring diagram (EasyEDA project)
 └── firmware/                  # ESP32 sketches (Arduino IDE)
     ├── Full_code/             #   MAIN firmware: DHT22 + EC + pH + HC-SR04 + pumps -> JSON

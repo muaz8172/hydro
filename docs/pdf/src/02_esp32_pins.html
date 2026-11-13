@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>02 ESP32 Pin Configuration</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .pin text { font-size: 10.5px; }
+  .pt td:nth-child(2), .pt td:nth-child(3) { font-family: var(--mono); font-size: 8.2pt; white-space: nowrap; }
+  .pt td:first-child { font-weight: 600; color: var(--ink); }
+  .defs td:first-child { font-family: var(--mono); font-size: 8.2pt; white-space: nowrap; }
+</style></head><body>
+
+<!-- ============ PAGE 1: pinout ============ -->
+<section class="page">
+  <div class="hero">
+    <div class="num">02</div>
+    <div class="kicker">Hydro · Innovation 2026 · Document 2 of 5</div>
+    <h1>ESP32 Pin Configuration</h1>
+    <p>Which ESP32 pin goes to which sensor and relay, how each one is powered, and the two voltage dividers that keep 5 V away from the 3.3 V pins.
+       Source of truth: <span style="font-family:var(--mono);font-size:8.6pt">firmware/Full_code/Full_code.ino</span>.</p>
+  </div>
+
+  <svg viewBox="0 0 680 500" width="100%" style="display:block;height:104mm">
+    <defs>
+      <linearGradient id="pcb" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2c2f33"/><stop offset="1" stop-color="#1d1f22"/></linearGradient>
+    </defs>
+    <!-- board -->
+    <rect x="245" y="10" width="190" height="480" rx="10" fill="url(#pcb)"/>
+    <rect x="290" y="18" width="100" height="58" rx="4" fill="#3a3e43" stroke="#555" />
+    <text x="340" y="44" text-anchor="middle" fill="#cfd3d6" font-size="11" font-weight="700">ESP32-WROOM-32</text>
+    <text x="340" y="60" text-anchor="middle" fill="#8d9296" font-size="9">antenna end</text>
+    <rect x="315" y="456" width="50" height="30" rx="3" fill="#9aa0a6"/>
+    <text x="340" y="475" text-anchor="middle" fill="#222" font-size="9" font-weight="700">USB</text>
+    <text x="340" y="250" text-anchor="middle" fill="#6f757a" font-size="12" font-weight="700" transform="rotate(-90 340 250)">ESP32 DevKit V1 · 30-pin</text>
+
+    <g id="pins"></g>
+  </svg>
+  <script>
+    // pin rows, top to bottom (DOIT ESP32 DevKit V1, 30 pins)
+    const L = ["EN","VP 36","VN 39","D34","D35","D32","D33","D25","D26","D27","D14","D12","D13","GND","VIN"];
+    const R = ["D23","D22","TX0 1","RX0 3","D21","D19","D18","D5","TX2 17","RX2 16","D4","D2","D15","GND","3V3"];
+    const USE = {
+      "D32": ["EC sensor A0 (analog, ADC1)", "#13b5c9"],
+      "D33": ["pH Po via 10k/20k divider (ADC1)", "#7b4df0"],
+      "GND": ["Common ground: all sensors + relays", "#555555"],
+      "VIN": ["5 V rail: pH, HC-SR04, both relays", "#c0392b"],
+      "D21": ["Relay 2 IN1 → sampling pump (Pump N)", "#2f8fe0"],
+      "D19": ["Relay 1 IN2 → Pump B (Nutrient B / Out)", "#3d5afe"],
+      "D18": ["Relay 1 IN1 → Pump A (Nutrient A / In)", "#3d5afe"],
+      "TX2 17": ["HC-SR04 ECHO via 1k/2k divider", "#2b5c94"],
+      "RX2 16": ["HC-SR04 TRIG", "#2b5c94"],
+      "D4": ["DHT22 DATA (10k pull-up)", "#ee3fc0"],
+      "3V3": ["3.3 V rail: DHT22, EC sensor", "#d35400"],
+    };
+    const g = document.getElementById("pins"), NS = "http://www.w3.org/2000/svg";
+    const el = (t, a, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt) e.textContent = txt; g.appendChild(e); return e; };
+    const y0 = 98, dy = 25.5;
+    [[L, 245, -1], [R, 435, 1]].forEach(([pins, x, side]) => pins.forEach((name, i) => {
+      const y = y0 + i * dy, u = USE[name];
+      el("circle", { cx: x - side * 12, cy: y, r: 5.2, fill: u ? u[1] : "#b8a76a", stroke: "#e9e4cf", "stroke-width": 1.4 });
+      el("text", { x: x - side * 24, y: y + 3.6, "text-anchor": side < 0 ? "start" : "end", fill: u ? "#ffffff" : "#8d9296", "font-size": 10.5, "font-weight": u ? 700 : 400 }, name);
+      if (u) {
+        el("line", { x1: x - side * 6, y1: y, x2: x + side * 22, y2: y, stroke: u[1], "stroke-width": 2 });
+        const tx = x + side * 26;
+        el("rect", { x: side < 0 ? tx - 214 : tx, y: y - 10, width: 214, height: 20, rx: 5, fill: "#ffffff", stroke: u[1], "stroke-width": 1.2 });
+        el("text", { x: side < 0 ? tx - 8 : tx + 8, y: y + 3.8, "text-anchor": side < 0 ? "end" : "start", fill: "#2f3437", "font-size": 10.3 }, u[0]);
+      }
+    }));
+  </script>
+  <p class="small" style="margin:1mm 0 3mm">Pin positions follow the common DOIT ESP32 DevKit V1 (30-pin) board. On a 38-pin board the GPIO numbers are the same but the positions differ, so wire by the GPIO number printed on the board.</p>
+
+  <h2 style="margin-top:0">Pin assignment</h2>
+  <table class="pt">
+    <tr><th>Device</th><th>Pin</th><th>ESP32 pin</th><th>Power</th><th>Notes</th></tr>
+    <tr><td>DHT22</td><td>DATA</td><td>GPIO4 (D4)</td><td>3.3 V</td><td>10k pull-up if the module has none</td></tr>
+    <tr><td>EC sensor (EC V2.1)</td><td>A0</td><td>GPIO32 (D32)</td><td>3.3 V</td><td>ADC1 · T1 not connected</td></tr>
+    <tr><td>pH sensor (PH-4502C)</td><td>Po</td><td>GPIO33 (D33)</td><td>5 V</td><td>ADC1 · <b>10k / 20k divider required</b></td></tr>
+    <tr><td>HC-SR04</td><td>TRIG</td><td>GPIO16 (D16)</td><td>5 V</td><td>3.3 V trigger is enough</td></tr>
+    <tr><td>HC-SR04</td><td>ECHO</td><td>GPIO17 (D17)</td><td>5 V</td><td><b>1k / 2k divider required</b> (5 V echo pulse)</td></tr>
+    <tr><td>Relay 1 · Pump A (In)</td><td>IN1</td><td>GPIO18 (D18)</td><td>5 V</td><td>Active LOW · GND shared with ESP32</td></tr>
+    <tr><td>Relay 1 · Pump B (Out)</td><td>IN2</td><td>GPIO19 (D19)</td><td>5 V</td><td>Active LOW</td></tr>
+    <tr><td>Relay 2 · Sampling pump</td><td>IN1</td><td>GPIO21 (D21)</td><td>5 V</td><td>Active LOW · relay 2 IN2 spare</td></tr>
+  </table>
+  <div class="callout warn"><b>Never put more than 3.3 V on an ESP32 pin.</b> Keep the pH and EC probes in separate containers when testing; they interfere with each other.</div>
+  <div class="foot"><span>Hydro · 02 ESP32 Pin Configuration</span><span>1</span></div>
+</section>
+
+<!-- ============ PAGE 2: dividers, power, firmware ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 02 ESP32 Pin Configuration</span><span>Dividers, power and firmware settings</span></div>
+  <span class="sec">Protecting the 3.3 V pins</span>
+  <h1>Voltage dividers</h1>
+  <p class="lead" style="margin-bottom:3mm">The ESP32 pins take at most 3.3 V. Two modules run on 5 V and can output more than that, so each gets a resistor divider.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">pH output (Po → GPIO33)</h3>
+      <svg viewBox="0 0 310 172" width="100%" style="height:34mm">
+        <g stroke="#2f3437" stroke-width="2" fill="none">
+          <path d="M20 40 H70"/><rect x="70" y="30" width="60" height="20" rx="3" fill="#fff"/><path d="M130 40 H220"/>
+          <path d="M170 40 V75"/><rect x="160" y="75" width="20" height="50" rx="3" fill="#fff"/><path d="M170 125 V150 H20"/>
+        </g>
+        <circle cx="170" cy="40" r="4" fill="#2f3437"/>
+        <text x="16" y="24" font-size="15" font-weight="700" fill="#7b4df0">Po (0–5 V)</text>
+        <text x="100" y="44" font-size="14" text-anchor="middle" fill="#111">10k</text>
+        <text x="190" y="104" font-size="14" fill="#111">20k</text>
+        <text x="224" y="45" font-size="15" font-weight="700" fill="#7b4df0">GPIO33</text>
+        <text x="16" y="165" font-size="15" font-weight="700" fill="#555">GND</text>
+        <text x="198" y="146" font-size="13" fill="#787774">V<tspan dy="3" font-size="8">pin</tspan><tspan dy="-3"> = Po × 2/3</tspan></text>
+      </svg>
+      <p class="small" style="margin:0">Firmware multiplies back by <code>PH_DIVIDER 1.5</code>. A Po of 4.6 V is about 3.07 V at the pin (<code>PH_ADC_LIMIT</code>).</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">HC-SR04 echo (ECHO → GPIO17)</h3>
+      <svg viewBox="0 0 310 172" width="100%" style="height:34mm">
+        <g stroke="#2f3437" stroke-width="2" fill="none">
+          <path d="M20 40 H70"/><rect x="70" y="30" width="60" height="20" rx="3" fill="#fff"/><path d="M130 40 H220"/>
+          <path d="M170 40 V75"/><rect x="160" y="75" width="20" height="50" rx="3" fill="#fff"/><path d="M170 125 V150 H20"/>
+        </g>
+        <circle cx="170" cy="40" r="4" fill="#2f3437"/>
+        <text x="16" y="24" font-size="15" font-weight="700" fill="#2b5c94">ECHO (5 V pulse)</text>
+        <text x="100" y="44" font-size="14" text-anchor="middle" fill="#111">1k</text>
+        <text x="190" y="104" font-size="14" fill="#111">2k</text>
+        <text x="224" y="45" font-size="15" font-weight="700" fill="#2b5c94">GPIO17</text>
+        <text x="16" y="165" font-size="15" font-weight="700" fill="#555">GND</text>
+        <text x="198" y="146" font-size="13" fill="#787774">5 V → 3.33 V</text>
+      </svg>
+      <p class="small" style="margin:0">TRIG is driven straight from GPIO16. Each level reading is the median of 5 pings, corrected for air temperature.</p>
+    </div>
+  </div>
+
+  <h2>Power rails</h2>
+  <table>
+    <tr><th style="width:30mm">Rail</th><th>Powers</th><th style="width:58mm">Why</th></tr>
+    <tr><td><span class="swatch" style="background:#d35400"></span><b>3.3 V</b></td><td>DHT22, EC sensor</td><td>Output already within the ESP32 range</td></tr>
+    <tr><td><span class="swatch" style="background:#c0392b"></span><b>5 V</b></td><td>pH module, HC-SR04, relay module 1 and 2</td><td>Modules need 5 V to work properly</td></tr>
+    <tr><td><span class="swatch" style="background:#555"></span><b>GND</b></td><td>Everything, shared with the ESP32</td><td>Relays and sensors need a common reference</td></tr>
+  </table>
+
+  <h2>Why these pins</h2>
+  <ul>
+    <li><b>Analog inputs on ADC1</b> (GPIO32, GPIO33). ADC2 pins cannot be read while Wi-Fi is active, so ADC1 keeps the design ready for that.</li>
+    <li><b>No strapping pins used</b> (GPIO0, 2, 5, 12, 15). They decide the boot mode, and a sensor on them can stop the ESP32 from starting.</li>
+    <li><b>Relays default OFF.</b> The firmware sets the relay pins to OFF <i>before</i> making them outputs, so the pumps do not kick on at boot (<code>RELAY_ACTIVE_LOW true</code>: LOW = ON).</li>
+  </ul>
+
+  <h2>Firmware settings (Full_code.ino)</h2>
+  <table class="defs">
+    <tr><th style="width:56mm">Setting</th><th style="width:28mm">Value</th><th>Meaning</th></tr>
+    <tr><td>EC_MIN / EC_MAX</td><td>1.2 / 1.8 mS/cm</td><td>EC target band for pump auto control</td></tr>
+    <tr><td>PH_MIN / PH_MAX</td><td>5.5 / 6.5</td><td>pH target band for pump auto control</td></tr>
+    <tr><td>TEMP_MIN / TEMP_MAX</td><td>25 / 36 °C</td><td>Air-temperature status band (report only)</td></tr>
+    <tr><td>LOW_LEVEL_PCT · LOW_CONFIRM</td><td>20 % · 3</td><td>Tank low after 3 low readings in a row → all pumps off</td></tr>
+    <tr><td>SAMPLE / PUMP_START_DELAY</td><td>30 s / 60 s</td><td>Wait after boot before the sampling pump / Pump A+B start</td></tr>
+    <tr><td>SEND_INTERVAL · DHT_INTERVAL</td><td>2 s · 4 s</td><td>JSON line every 2 s over USB serial at 115200 baud</td></tr>
+  </table>
+  <div class="foot"><span>Hydro · 02 ESP32 Pin Configuration</span><span>2</span></div>
+</section>
+</body></html>

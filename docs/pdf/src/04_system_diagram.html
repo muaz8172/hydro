@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>04 System Diagram and Flowchart</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  svg.dg { display: block; width: 100%; }
+  .topics td:first-child { font-family: var(--mono); font-size: 8.1pt; white-space: nowrap; }
+  .legend { display: flex; gap: 5mm; font-size: 8pt; color: var(--muted); margin: 1mm 0 3mm; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 7mm; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 1.5mm; }
+</style>
+<script>
+// Tiny diagram helper: boxes, diamonds and arrows on an <svg>, top-left coordinates.
+const NS = "http://www.w3.org/2000/svg";
+const STY = {
+  esp:  ["#346538", "#edf3ec"], pi: ["#2b5c94", "#e7eff9"], data: ["#956400", "#fbf3db"],
+  plain:["#9a988f", "#ffffff"], ext: ["#7b4df0", "#f1ecfe"], term: ["#111111", "#111111"],
+  dec:  ["#2b5c94", "#ffffff"], off: ["#9f2f2d", "#fdebec"], on: ["#346538", "#edf3ec"],
+};
+function mk(svg, t, a, txt) { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; svg.appendChild(e); return e; }
+function lines(svg, cx, cy, arr, color, size = 11, bold0 = true, anchor = "middle", lh = 1.28) {
+  const top = cy - ((arr.length - 1) * size * lh) / 2 + size * 0.36;
+  arr.forEach((s, i) => mk(svg, "text", { x: cx, y: top + i * size * lh, "text-anchor": anchor, "font-size": i === 0 ? size : size * 0.88,
+    "font-weight": i === 0 && bold0 ? 700 : 400, fill: i === 0 ? color : "#55595c" }, s));
+}
+function box(svg, x, y, w, h, arr, st = "plain", r = 7, size = 11) {
+  const [s, f] = STY[st];
+  mk(svg, "rect", { x, y, width: w, height: h, rx: r, fill: f, stroke: s, "stroke-width": 1.4 });
+  lines(svg, x + w / 2, y + h / 2, arr, st === "term" ? "#ffffff" : "#111111", size);
+}
+function diamond(svg, cx, cy, w, h, arr, size = 10.5) {
+  const [s, f] = STY.dec;
+  mk(svg, "path", { d: `M${cx} ${cy - h / 2} L${cx + w / 2} ${cy} L${cx} ${cy + h / 2} L${cx - w / 2} ${cy} Z`, fill: f, stroke: s, "stroke-width": 1.4 });
+  lines(svg, cx, cy, arr, "#111111", size, false);
+}
+function arrow(svg, pts, color = "#55595c", label, lx, ly, dash) {
+  const id = "m" + color.replace("#", "");
+  if (!svg.querySelector("#" + id)) {
+    let d = svg.querySelector("defs") || mk(svg, "defs", {});
+    const m = document.createElementNS(NS, "marker");
+    for (const [k, v] of Object.entries({ id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" })) m.setAttribute(k, v);
+    const p = document.createElementNS(NS, "path"); p.setAttribute("d", "M0 0 L10 5 L0 10 z"); p.setAttribute("fill", color); m.appendChild(p); d.appendChild(m);
+  }
+  const a = { points: pts.map((p) => p.join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 1.6, "marker-end": `url(#${id})` };
+  if (dash) a["stroke-dasharray"] = "4 3";
+  mk(svg, "polyline", a);
+  if (label) {
+    const t = mk(svg, "text", { x: lx, y: ly, "font-size": 9.6, fill: color, "text-anchor": "middle", "font-weight": 600 }, label);
+  }
+}
+function label(svg, x, y, s, color = "#787774", size = 9.6, anchor = "middle", weight = 400) {
+  mk(svg, "text", { x, y, "font-size": size, fill: color, "text-anchor": anchor, "font-weight": weight }, s);
+}
+</script></head><body>
+
+<!-- ============ PAGE 1: architecture ============ -->
+<section class="page">
+  <div class="hero">
+    <div class="num">04</div>
+    <div class="kicker">Hydro · Innovation 2026 · Document 4 of 5</div>
+    <h1>System Diagram &amp; Flowchart</h1>
+    <p>How data moves from the sensors through the ESP32, the USB cable and the MQTT broker to the logs, the camera AI and the dashboard, and how the firmware decides when to run the pumps.</p>
+  </div>
+  <span class="sec">1 · Architecture</span>
+  <h2 style="margin-top:0">Block diagram</h2>
+  <svg class="dg" id="arch" viewBox="0 0 700 600"></svg>
+  <div class="legend">
+    <span><i style="border-color:#346538"></i>sensor / relay wiring</span>
+    <span><i style="border-color:#55595c"></i>USB serial (JSON every 2 s)</span>
+    <span><i style="border-color:#2b5c94"></i>MQTT</span>
+    <span><i style="border-color:#956400"></i>files on the Pi</span>
+    <span><i style="border-color:#7b4df0"></i>camera (USB-C network)</span>
+  </div>
+  <p class="small" style="color:var(--text)"><b>In short:</b> the ESP32 is the only part that touches the hardware and it keeps dosing and protecting the pumps even if the Pi is off.
+  The Pi adds memory (CSV logs), eyes (camera + AI) and a screen (dashboard). All links are local: a USB cable to the ESP32, USB-C to the camera, and MQTT on the Pi itself.</p>
+  <script>
+  (() => {
+    const s = document.getElementById("arch");
+    // sensors + actuators
+    label(s, 75, 18, "SENSORS", "#346538", 10, "middle", 700);
+    box(s, 10, 28, 130, 40, ["DHT22", "air temp + humidity"], "plain");
+    box(s, 10, 76, 130, 40, ["EC sensor", "nutrient strength"], "plain");
+    box(s, 10, 124, 130, 40, ["pH sensor", "PH-4502C"], "plain");
+    box(s, 10, 172, 130, 40, ["HC-SR04", "water level"], "plain");
+    label(s, 75, 248, "ACTUATORS", "#346538", 10, "middle", 700);
+    box(s, 10, 258, 130, 40, ["Pump A", "Nutrient A · relay 1"], "plain");
+    box(s, 10, 306, 130, 40, ["Pump B", "Nutrient B · relay 1"], "plain");
+    box(s, 10, 354, 130, 40, ["Sampling pump", "Pump N · relay 2"], "plain");
+    // ESP32
+    box(s, 185, 60, 140, 300, [], "esp", 10);
+    label(s, 255, 92, "ESP32", "#111", 15, "middle", 700);
+    ["Full_code.ino", "", "read sensors", "hold last good value", "auto dosing (EC/pH)", "tank-low stop", "calibration (EEPROM)", "JSON line every 2 s"]
+      .forEach((t, i) => label(s, 255, 112 + i * 17, t, i === 0 ? "#346538" : "#3c4043", 10.4, "middle", i === 0 ? 600 : 400));
+    [48, 96, 144, 192].forEach((y) => arrow(s, [[140, y], [185, Math.max(80, Math.min(y, 340))]], "#346538"));
+    [278, 326, 374].forEach((y) => arrow(s, [[185, Math.min(y, 345)], [140, y]], "#346538"));
+    // MaixCAM
+    box(s, 185, 430, 140, 70, ["Sipeed MaixCAM", "hydro_cam app", "photo 640×480"], "ext");
+    // Raspberry Pi container
+    mk(s, "rect", { x: 365, y: 10, width: 330, height: 585, rx: 12, fill: "#fbfaf7", stroke: "#2b5c94", "stroke-width": 1.6, "stroke-dasharray": "6 4" });
+    label(s, 380, 32, "RASPBERRY PI 5 · offline", "#2b5c94", 10.5, "start", 700);
+    box(s, 385, 50, 135, 62, ["bridge.py", "serial ↔ MQTT", "hydro-bridge.service"], "pi");
+    box(s, 550, 50, 130, 150, [], "pi");
+    label(s, 615, 72, "Mosquitto", "#111", 12, "middle", 700);
+    label(s, 615, 87, "1883 local · 9001 ws", "#55595c", 9.4);
+    ["hydro/sensors", "hydro/log", "hydro/cmd", "hydro/vision", "hydro/vision/image", "hydro/vision/status", "hydro/vision/cmd"]
+      .forEach((t, i) => label(s, 615, 106 + i * 13.5, t, "#2b5c94", 9.2));
+    box(s, 385, 170, 135, 56, ["data/logs/", "CSV per session"], "data");
+    box(s, 550, 250, 130, 62, ["server.py :8000", "page + history API", "CSV export"], "pi");
+    box(s, 385, 330, 135, 72, ["vision.py", "colour health check", "stage model (ONNX)"], "pi");
+    box(s, 385, 450, 135, 56, ["data/vision/", "photos + vision_log.csv"], "data");
+    box(s, 550, 370, 130, 80, ["Dashboard", "Live · History", "Calibration", "Firefox kiosk (HDMI)"], "pi");
+    box(s, 550, 500, 130, 52, ["Phone / laptop", "same network, :8000"], "plain");
+    // links
+    arrow(s, [[325, 86], [385, 86]], "#55595c", "USB serial", 345, 78);
+    arrow(s, [[385, 100], [325, 100]], "#55595c", "commands", 345, 116);
+    arrow(s, [[520, 70], [550, 70]], "#2b5c94");
+    arrow(s, [[550, 96], [520, 96]], "#2b5c94");
+    arrow(s, [[452, 112], [452, 170]], "#956400", "write CSV", 482, 146);
+    arrow(s, [[520, 198], [535, 198], [535, 270], [550, 270]], "#956400", "read", 520, 240);
+    arrow(s, [[615, 312], [615, 370]], "#55595c", "HTTP", 638, 345);
+    arrow(s, [[690, 200], [690, 410], [680, 410]], "#2b5c94", "ws :9001", 652, 228);
+    arrow(s, [[680, 430], [690, 430], [690, 200]], "#2b5c94");
+    arrow(s, [[325, 465], [355, 465], [355, 366], [385, 366]], "#7b4df0", "GET /snap.jpg", 255, 518);
+    label(s, 255, 532, "USB-C · 10.122.173.1", "#7b4df0", 9.4);
+    arrow(s, [[520, 350], [540, 350], [540, 180], [550, 180]], "#2b5c94", "publish", 518, 318);
+    arrow(s, [[452, 402], [452, 450]], "#956400", "every 15 min", 490, 432);
+    arrow(s, [[615, 450], [615, 500]], "#55595c", "", 0, 0, true);
+  })();
+  </script>
+  <div class="foot"><span>Hydro · 04 System Diagram &amp; Flowchart</span><span>1</span></div>
+</section>
+
+<!-- ============ PAGE 2: topics + data paths ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 04 System Diagram &amp; Flowchart</span><span>MQTT topics and data paths</span></div>
+  <span class="sec">2 · Messaging</span>
+  <h1>MQTT topics</h1>
+  <p class="lead">Mosquitto runs on the Pi. Programs on the Pi use port 1883 (localhost only); the dashboard in the browser uses the WebSocket listener on port 9001.</p>
+  <table class="topics">
+    <tr><th>Topic</th><th style="width:30mm">Published by</th><th style="width:30mm">Read by</th><th>Content</th></tr>
+    <tr><td>hydro/sensors</td><td>bridge.py</td><td>Dashboard</td><td>One JSON reading every 2 s (+ <code>log_id</code>, <code>row</code>)</td></tr>
+    <tr><td>hydro/log</td><td>bridge.py</td><td>Dashboard</td><td>ESP32 text messages (calibration replies, warnings)</td></tr>
+    <tr><td>hydro/cmd</td><td>Dashboard, <code>mosquitto_pub</code></td><td>bridge.py → ESP32</td><td>Commands: <code>status</code>, <code>enterec</code>, <code>ph7</code>, <code>pumpauto</code>, …</td></tr>
+    <tr><td>hydro/vision</td><td>vision.py</td><td>Dashboard</td><td>Health, canopy, yellowing, stage, confidence, size (JSON)</td></tr>
+    <tr><td>hydro/vision/image</td><td>vision.py</td><td>Dashboard</td><td>Latest photo as JPEG bytes (retained)</td></tr>
+    <tr><td>hydro/vision/status</td><td>vision.py</td><td>Dashboard</td><td><code>online</code> or <code>offline: &lt;reason&gt;</code></td></tr>
+    <tr><td>hydro/vision/cmd</td><td>Dashboard</td><td>vision.py</td><td><code>snap</code> = save a photo now</td></tr>
+  </table>
+
+  <h3>Path of one sensor reading</h3>
+  <svg class="dg" id="path1" viewBox="0 0 700 92"></svg>
+  <h3>Path of a command (e.g. calibration)</h3>
+  <svg class="dg" id="path2" viewBox="0 0 700 92"></svg>
+  <script>
+  (() => {
+    const chain = (id, items, color) => {
+      const s = document.getElementById(id), w = 118, gap = (700 - items.length * w) / (items.length - 1);
+      items.forEach((it, i) => {
+        const x = i * (w + gap);
+        box(s, x, 14, w, 64, it[0], it[1], 7, 10.5);
+        if (i < items.length - 1) arrow(s, [[x + w + 2, 46], [x + w + gap - 2, 46]], color);
+      });
+    };
+    chain("path1", [[["Sensors", "DHT22 · EC · pH", "HC-SR04"], "plain"], [["ESP32", "JSON line", "USB serial"], "esp"],
+      [["bridge.py", "adds log_id, row", "writes CSV"], "pi"], [["Mosquitto", "hydro/sensors"], "pi"], [["Dashboard", "tiles update", "live"], "pi"]], "#55595c");
+    chain("path2", [[["Dashboard", "button press"], "pi"], [["Mosquitto", "hydro/cmd"], "pi"], [["bridge.py", "writes to", "serial port"], "pi"],
+      [["ESP32", "runs command", "saves EEPROM"], "esp"], [["Dashboard", "reply via", "hydro/log"], "pi"]], "#2b5c94");
+  })();
+  </script>
+
+  <h2>Services on the Pi (start-up order)</h2>
+  <table>
+    <tr><th style="width:44mm">Service</th><th>Starts when</th><th>Runs</th></tr>
+    <tr><td><code>mosquitto</code></td><td>Boot</td><td>MQTT broker (1883 local, 9001 websocket)</td></tr>
+    <tr><td><code>hydro-bridge</code></td><td>ESP32 plugged in (udev → <code>/dev/esp32</code>); stops when unplugged</td><td><code>backend/bridge.py</code></td></tr>
+    <tr><td><code>hydro-vision</code></td><td>Boot</td><td><code>backend/vision.py</code>, photo every 10 s</td></tr>
+    <tr><td><code>hydro-dashboard</code></td><td>Boot</td><td><code>backend/server.py</code> on port 8000</td></tr>
+    <tr><td><code>hydro-kiosk</code> (user)</td><td>Desktop log-in</td><td>Firefox full screen on the HDMI monitor, screen never blanks</td></tr>
+  </table>
+  <div class="callout">Everything runs offline: the dashboard's libraries (<code>mqtt.js</code>, uPlot) and fonts are stored in <code>frontend/vendor/</code>. If the browser cannot reach port 9001, the camera photo still updates over HTTP from <code>frontend/live/</code>.</div>
+  <div class="foot"><span>Hydro · 04 System Diagram &amp; Flowchart</span><span>2</span></div>
+</section>
+
+<!-- ============ PAGE 3: flowcharts ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 04 System Diagram &amp; Flowchart</span><span>Firmware flowcharts</span></div>
+  <span class="sec">3 · Flowcharts</span>
+  <h1>ESP32 firmware logic</h1>
+  <div class="grid2" style="gap:6mm">
+    <div>
+      <h3 style="margin-top:1mm">Main loop</h3>
+      <svg class="dg" id="loop" viewBox="0 0 330 720"></svg>
+    </div>
+    <div>
+      <h3 style="margin-top:1mm">Pump A + B decision (auto mode)</h3>
+      <svg class="dg" id="pump" viewBox="0 0 330 720"></svg>
+    </div>
+  </div>
+  <script>
+  (() => {
+    const s = document.getElementById("loop"), cx = 165, W = 210;
+    box(s, cx - 70, 4, 140, 36, ["Power on / reset"], "term", 18);
+    arrow(s, [[cx, 40], [cx, 58]]);
+    box(s, cx - W / 2, 58, W, 52, ["Set relays OFF first", "then make pins outputs", "load calibration (EEPROM)"], "esp");
+    arrow(s, [[cx, 110], [cx, 130]]);
+    box(s, cx - W / 2, 130, W, 66, ["Read sensors", "EC, pH (30 samples)", "HC-SR04 median of 5", "DHT22 every 4 s"], "plain");
+    arrow(s, [[cx, 196], [cx, 216]]);
+    box(s, cx - W / 2, 216, W, 52, ["Clean the readings", "reject DHT jumps, ghost echoes", "hold last good value 20 s"], "plain");
+    arrow(s, [[cx, 268], [cx, 288]]);
+    diamond(s, cx, 330, 210, 84, ["Tank low?", "< 20 %, 3 readings in a row"]);
+    arrow(s, [[cx + 105, 330], [300, 330], [300, 372]], "#9f2f2d", "yes", 290, 322);
+    box(s, 245, 372, 82, 50, ["All pumps", "OFF"], "off");
+    arrow(s, [[cx, 372], [cx, 392]], "#55595c", "no", cx + 14, 386);
+    box(s, cx - 82, 392, 164, 50, ["Pump control", "auto or manual"], "on");
+    arrow(s, [[286, 422], [286, 470], [cx + 82, 470]], "#55595c");
+    arrow(s, [[cx, 442], [cx, 460]]);
+    box(s, cx - W / 2, 460, W, 52, ["Send JSON line", "USB serial, every 2 s"], "esp");
+    arrow(s, [[cx, 512], [cx, 532]]);
+    diamond(s, cx, 574, 210, 84, ["Command received?", "from hydro/cmd via bridge"]);
+    arrow(s, [[cx, 616], [cx, 640]], "#55595c", "yes", cx + 16, 632);
+    box(s, cx - W / 2, 640, W, 52, ["Run command", "calibrate · pump · status", "reply on serial → hydro/log"], "plain");
+    arrow(s, [[cx - W / 2, 666], [12, 666], [12, 163], [cx - W / 2, 163]], "#55595c");
+    arrow(s, [[cx - 105, 574], [12, 574]], "#55595c", "no", 40, 566);
+    label(s, 22, 420, "loop", "#787774", 9.5, "start");
+  })();
+  (() => {
+    const s = document.getElementById("pump"), cx = 140;
+    box(s, cx - 80, 4, 160, 36, ["Every reading"], "term", 18);
+    arrow(s, [[cx, 40], [cx, 56]]);
+    diamond(s, cx, 100, 200, 84, ["60 s since boot?", "PUMP_START_DELAY"]);
+    arrow(s, [[cx + 100, 100], [262, 100], [262, 128]], "#9f2f2d", "no", 252, 92);
+    box(s, 222, 128, 104, 44, ["Wait", "pumps OFF"], "off");
+    arrow(s, [[cx, 142], [cx, 172]], "#55595c", "yes", cx + 16, 162);
+    diamond(s, cx, 214, 200, 84, ["Tank low?", "level_low"]);
+    arrow(s, [[cx + 100, 214], [262, 214], [262, 242]], "#9f2f2d", "yes", 252, 206);
+    box(s, 222, 242, 104, 44, ["Pumps OFF", "dry-run stop"], "off");
+    arrow(s, [[cx, 256], [cx, 286]], "#55595c", "no", cx + 14, 276);
+    diamond(s, cx, 328, 200, 84, ["pH reading valid?"]);
+    arrow(s, [[cx + 100, 328], [262, 328], [262, 356]], "#9f2f2d", "no", 252, 320);
+    box(s, 222, 356, 104, 44, ["Pumps OFF", "safety"], "off");
+    arrow(s, [[cx, 370], [cx, 400]], "#55595c", "yes", cx + 16, 390);
+    diamond(s, cx, 452, 236, 104, ["EC 1.2–1.8 mS/cm", "AND pH 5.5–6.5?", "(ec_low counts as under)"]);
+    arrow(s, [[cx - 118, 452], [8, 452], [8, 520]], "#55595c", "yes", 30, 444);
+    box(s, 4, 520, 130, 56, ["Pump A + B OFF", "target reached"], "off");
+    arrow(s, [[cx, 504], [cx + 60, 504], [cx + 120, 504], [cx + 120, 520]], "#55595c", "no", cx + 100, 498);
+    box(s, 196, 520, 130, 56, ["Pump A + B ON", "dose until in target"], "on");
+    box(s, 30, 612, 270, 92, [], "plain");
+    label(s, 165, 634, "Sampling pump", "#111", 11, "middle", 700);
+    label(s, 165, 652, "starts 30 s after boot, then always on", "#55595c", 9.6);
+    label(s, 165, 668, "stops only when the tank is low", "#55595c", 9.6);
+    label(s, 165, 684, "or on the sampleoff command", "#55595c", 9.6);
+  })();
+  </script>
+  <h3 style="margin-top:2mm">Camera check (vision.py, every 10 s)</h3>
+  <svg class="dg" id="vis" viewBox="0 0 700 92"></svg>
+  <script>
+  (() => {
+    const s = document.getElementById("vis"), items = [
+      [["Get photo", "MaixCAM /snap.jpg"], "ext"], [["Colour check", "green < 2 % = no_plant", "yellow > 8 % = check"], "plain"],
+      [["Stage model", "ONNX, 224×224", "< 60 % = uncertain"], "pi"], [["Publish", "hydro/vision", "+ photo (retained)"], "pi"],
+      [["Save to disk", "every 15 min", "or on snap"], "data"]];
+    const w = 124, gap = (700 - items.length * w) / (items.length - 1);
+    items.forEach((it, i) => { const x = i * (w + gap); box(s, x, 14, w, 64, it[0], it[1], 7, 10.5);
+      if (i < items.length - 1) arrow(s, [[x + w + 2, 46], [x + w + gap - 2, 46]], "#55595c"); });
+  })();
+  </script>
+  <div class="foot"><span>Hydro · 04 System Diagram &amp; Flowchart</span><span>3</span></div>
+</section>
+</body></html>

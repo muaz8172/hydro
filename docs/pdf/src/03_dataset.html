@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>03 Dataset</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .samples { display: grid; grid-template-columns: 26mm repeat(5, 1fr); gap: 2mm; align-items: center; margin-bottom: 2mm; }
+  .samples img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; display: block; border: 1px solid var(--line-strong); }
+  .samples .lab b { display: block; color: var(--ink); font-size: 10pt; }
+  .samples .lab span { font-size: 8pt; color: var(--muted); }
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 2mm 0 4mm; }
+  .flow .step { flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 2.6mm 3mm; font-size: 8.4pt; }
+  .flow .step b { display: block; color: var(--ink); font-size: 9pt; margin-bottom: .6mm; }
+  .flow .arr { width: 6mm; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12pt; }
+  .cm td, .cm th { text-align: center; }
+  .cm td:first-child, .cm th:first-child { text-align: left; }
+  .cm .hit { background: var(--good-bg); color: var(--good); font-weight: 700; }
+  .cols td:first-child { font-family: var(--mono); font-size: 8.1pt; white-space: nowrap; width: 30mm; }
+  pre { font-family: var(--mono); font-size: 7.8pt; background: #22262a; color: #e3e6e8; border-radius: 8px; padding: 3mm 4mm; margin: 1mm 0 3mm; white-space: pre; overflow: hidden; }
+</style></head><body>
+
+<!-- ============ PAGE 1 ============ -->
+<section class="page">
+  <div class="hero">
+    <div class="num">03</div>
+    <div class="kicker">Hydro · Innovation 2026 · Document 3 of 5</div>
+    <h1>Dataset</h1>
+    <p>The lettuce photo dataset that trains the growth-stage AI model, and the sensor and camera data the system records while it runs.</p>
+  </div>
+
+  <div class="grid4" style="margin-bottom:4mm">
+    <div class="stat"><small>Photos</small><b>88</b><span>labelled lettuce photos</span></div>
+    <div class="stat"><small>Classes</small><b>3</b><span>seedling · vegetative · matured</span></div>
+    <div class="stat"><small>Model input</small><b>224²</b><span>JPEG, RGB</span></div>
+    <div class="stat"><small>Test accuracy</small><b>86 %</b><span>5-fold cross-validation</span></div>
+  </div>
+
+  <span class="sec">Part A · Plant image dataset</span>
+  <h2 style="margin-top:0">Lettuce growth stages</h2>
+  <p>Each photo sits in a folder named after its growth stage; the folder name is the label. The stage also gives the plant size,
+     so one model predicts both. The classes are balanced, which keeps the model from favouring one stage.</p>
+  <table>
+    <tr><th>Stage</th><th>Size</th><th>Folder</th><th class="num">Photos</th><th class="num">Share</th><th>What it looks like</th></tr>
+    <tr><td><span class="swatch" style="background:var(--st-seed)"></span><b>Seedling</b></td><td>Small</td><td><code>seedling/</code></td><td class="num">30</td><td class="num">34 %</td><td>A few small leaves, plug or sponge visible</td></tr>
+    <tr><td><span class="swatch" style="background:var(--st-veg)"></span><b>Vegetative</b></td><td>Medium</td><td><code>vegetative/</code></td><td class="num">29</td><td class="num">33 %</td><td>Open rosette, leaves spreading</td></tr>
+    <tr><td><span class="swatch" style="background:var(--st-mat)"></span><b>Matured</b></td><td>Large</td><td><code>matured/</code></td><td class="num">29</td><td class="num">33 %</td><td>Full, dense head, ready to harvest</td></tr>
+    <tr><td><b>Total</b></td><td></td><td></td><td class="num"><b>88</b></td><td class="num">100 %</td><td></td></tr>
+  </table>
+
+  <h3>Sample photos (dataset/lettuce_224/)</h3>
+  <div class="samples">
+    <div class="lab"><b>Seedling</b><span>small</span></div>
+    <img src="../../../dataset/lettuce_224/seedling/seedling_002.jpg"><img src="../../../dataset/lettuce_224/seedling/seedling_008.jpg">
+    <img src="../../../dataset/lettuce_224/seedling/seedling_014.jpg"><img src="../../../dataset/lettuce_224/seedling/seedling_021.jpg">
+    <img src="../../../dataset/lettuce_224/seedling/seedling_027.jpg">
+  </div>
+  <div class="samples">
+    <div class="lab"><b>Vegetative</b><span>medium</span></div>
+    <img src="../../../dataset/lettuce_224/vegetative/vegetative_002.jpg"><img src="../../../dataset/lettuce_224/vegetative/vegetative_008.jpg">
+    <img src="../../../dataset/lettuce_224/vegetative/vegetative_015.jpg"><img src="../../../dataset/lettuce_224/vegetative/vegetative_021.jpg">
+    <img src="../../../dataset/lettuce_224/vegetative/vegetative_027.jpg">
+  </div>
+  <div class="samples">
+    <div class="lab"><b>Matured</b><span>large</span></div>
+    <img src="../../../dataset/lettuce_224/matured/matured_002.jpg"><img src="../../../dataset/lettuce_224/matured/matured_008.jpg">
+    <img src="../../../dataset/lettuce_224/matured/matured_015.jpg"><img src="../../../dataset/lettuce_224/matured/matured_021.jpg">
+    <img src="../../../dataset/lettuce_224/matured/matured_027.jpg">
+  </div>
+  <div class="foot"><span>Hydro · 03 Dataset</span><span>1</span></div>
+</section>
+
+<!-- ============ PAGE 2 ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 03 Dataset</span><span>Preparation and model results</span></div>
+  <span class="sec">Part A · continued</span>
+  <h1>From photos to a model</h1>
+
+  <h2>Two versions of the dataset</h2>
+  <table>
+    <tr><th style="width:52mm">Folder</th><th>Content</th></tr>
+    <tr><td><code>dataset/lettuce_growth_stages/</code></td><td>The 88 original photos, untouched. Mixed formats (82 JPEG, 4 AVIF, 2 WEBP) and sizes from 194×259 to 2976×2232 px.
+        Two photos were removed because the same image had two different labels.</td></tr>
+    <tr><td><code>dataset/lettuce_224/</code></td><td>The same 88 photos as 224×224 JPEG (quality 95), ready for training.</td></tr>
+  </table>
+
+  <div class="flow">
+    <div class="step"><b>1 · Collect</b>Photos sorted into stage folders</div><div class="arr">→</div>
+    <div class="step"><b>2 · Clean</b>Rotate upright, drop duplicates with two labels</div><div class="arr">→</div>
+    <div class="step"><b>3 · Resize</b>Centre-crop square, 224×224 JPEG</div><div class="arr">→</div>
+    <div class="step"><b>4 · Label</b><code>labels.csv</code>: file, stage, size, source</div><div class="arr">→</div>
+    <div class="step"><b>5 · Train</b>MobileNetV3-Small, 5-fold CV, export ONNX</div>
+  </div>
+
+
+  <h2>Training method</h2>
+  <p><code>backend/train/train_stage.py</code> fine-tunes an ImageNet-pretrained <b>MobileNetV3-Small</b> for 30 epochs with augmentation and a class-weighted loss,
+     on the Raspberry Pi 5 itself (about 40 minutes). It is tested with <b>5-fold stratified cross-validation</b>: every photo is predicted once by a model that never saw it.</p>
+
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">Result (chosen model: classifier)</h3>
+      <table>
+        <tr><th>Model</th><th class="num">Test acc</th><th class="num">MAE</th></tr>
+        <tr><td>Always "Small" (baseline)</td><td class="num">34 %</td><td class="num">0.99</td></tr>
+        <tr><td>Always "Medium" (baseline)</td><td class="num">33 %</td><td class="num">0.67</td></tr>
+        <tr><td><b>A: Classifier (chosen)</b></td><td class="num"><b>86 %</b></td><td class="num"><b>0.16</b></td></tr>
+        <tr><td>B: Regression</td><td class="num">76 %</td><td class="num">0.24</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Confusion matrix (test, 88 photos)</h3>
+      <table class="cm">
+        <tr><th>Actual ↓ / Pred →</th><th>Seed.</th><th>Veg.</th><th>Mat.</th><th>Recall</th></tr>
+        <tr><td>Seedling</td><td class="hit">29</td><td>1</td><td>0</td><td>97 %</td></tr>
+        <tr><td>Vegetative</td><td>3</td><td class="hit">23</td><td>3</td><td>79 %</td></tr>
+        <tr><td>Matured</td><td>2</td><td>3</td><td class="hit">24</td><td>83 %</td></tr>
+      </table>
+    </div>
+  </div>
+  <figure>
+    <img src="../../../backend/models/stage_training.png">
+    <figcaption>Training curves from <code>backend/models/stage_training.png</code>. Exported model: <code>backend/models/stage.onnx</code>, 6.1 MB, 10 ms per photo on the Pi 5 (ONNX Runtime, CPU).</figcaption>
+  </figure>
+  <div class="foot"><span>Hydro · 03 Dataset</span><span>2</span></div>
+</section>
+
+<!-- ============ PAGE 3 ============ -->
+<section class="page">
+  <div class="run"><span><b>Hydro</b> · 03 Dataset</span><span>Data recorded by the system</span></div>
+  <span class="sec">Part B · Recorded data</span>
+  <h1>Sensor and camera logs</h1>
+  <p class="lead">While running, the Raspberry Pi writes two kinds of data to <code>data/</code> (kept out of git). They feed the dashboard history and can be opened in Excel or LibreOffice.</p>
+
+  <h2>Sensor session logs · <span style="font-family:var(--mono);font-size:10pt">data/logs/log_NNNN_&lt;date&gt;_&lt;time&gt;.csv</span></h2>
+  <p>A new file starts each time the ESP32 connects (plugged in, Pi reboot or bridge restart). One row every 2 seconds, about <b>43,200 rows a day</b>.
+     Booleans are stored as 1 / 0 and a missing value is an empty cell.</p>
+  <table class="cols">
+    <tr><th>Column</th><th>Unit</th><th>Meaning</th></tr>
+    <tr><td>log_id, row, time</td><td></td><td>Log number (counts up per file), row in the file, timestamp</td></tr>
+    <tr><td>temp, hum</td><td>°C, %</td><td>Air temperature and humidity (DHT22)</td></tr>
+    <tr><td>ec, ec_low</td><td>mS/cm</td><td>Nutrient strength; <code>ec_low</code> = signal below the ADC floor (EC &lt; ~0.6)</td></tr>
+    <tr><td>ph</td><td></td><td>pH of the nutrient water</td></tr>
+    <tr><td>level, level_pct, level_low</td><td>cm, %</td><td>Water height, level in %, tank-low flag (below 20 %)</td></tr>
+    <tr><td>dist_cm, ec_mv, po_mv</td><td>cm, mV</td><td>Raw HC-SR04 distance and raw sensor voltages (for calibration)</td></tr>
+    <tr><td>pump_a, pump_b</td><td>1 / 0</td><td>Pump A / Pump B relay state</td></tr>
+    <tr><td>pump_auto, pump_sample</td><td>1 / 0</td><td>Auto (EC/pH) mode, sampling pump state</td></tr>
+  </table>
+
+  <h2>Camera log · <span style="font-family:var(--mono);font-size:10pt">data/vision/vision_log.csv</span></h2>
+  <p>One row every 15 minutes (or when <b>Save photo</b> is pressed), with the photo saved as <code>data/vision/YYYY-MM-DD/HH-MM-SS.jpg</code>.</p>
+  <table class="cols">
+    <tr><th>Column</th><th>Unit</th><th>Meaning</th></tr>
+    <tr><td>time, image</td><td></td><td>Timestamp and the saved photo's path</td></tr>
+    <tr><td>canopy_pct</td><td>%</td><td>Share of the photo that is plant (rough size measure)</td></tr>
+    <tr><td>yellow_pct</td><td>%</td><td>Yellow / brown share of the plant area</td></tr>
+    <tr><td>greenness</td><td>−1 … 1</td><td>Excess-green index of the plant pixels</td></tr>
+    <tr><td>health, reasons</td><td></td><td><code>healthy</code>, <code>check</code> (yellow &gt; 8 %), <code>unhealthy</code> (&gt; 20 %), <code>no_plant</code></td></tr>
+    <tr><td>stage, stage_conf, size</td><td>0 … 1</td><td>AI growth stage (or <code>uncertain</code> below 60 %), confidence, size</td></tr>
+  </table>
+  <div class="callout warn"><b>Next step for the dataset.</b> All 88 training photos come from the internet. Photos saved by the system's own camera are the path to a better model: photos saved by the camera can be labelled and added to <code>dataset/</code>, then the model is retrained with <code>train_stage.py</code> so it learns the real rack view.</div>
+  <div class="foot"><span>Hydro · 03 Dataset</span><span>3</span></div>
+</section>
+</body></html>

@@ -1,4 +1,4 @@
-"""Build docs/Hydro_System_Guide.pdf.
+"""Build docs/pdf/Hydro_System_Guide.pdf.
 
 Run:  .venv/bin/python docs/guide/build_guide.py
 Needs: reportlab (pip install reportlab) and the DejaVu fonts (fonts-dejavu-core).
@@ -17,7 +17,7 @@ from reportlab.platypus import (Flowable, KeepTogether, PageBreak, Paragraph, Si
                                 Spacer, Table, TableStyle)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(os.path.dirname(HERE), "Hydro_System_Guide.pdf")
+OUT = os.path.join(os.path.dirname(HERE), "pdf", "Hydro_System_Guide.pdf")
 VERSION = "7"
 DATE = "15 October 2026"
 MODEL_DATE = "29 September 2026"   # last stage-model retrain

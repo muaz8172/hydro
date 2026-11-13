@@ -8,6 +8,8 @@
 | `04_System_Diagram_and_Flowchart.pdf` | 3 | Block diagram (ESP32 → USB serial → bridge → MQTT → dashboard/logs/camera), MQTT topics, services, firmware and pump flowcharts |
 | `05_Dashboard_Overview.pdf` | 3 | Annotated screenshots of the Live Monitoring, Sensor History and Calibration tabs |
 | `Hydro_System_Guide.pdf` | | Full technical guide (built by `docs/guide/build_guide.py`) |
+| `EC_Sensor_Guide.pdf` | 3 | How the EC sensor works, pins, calibration, target ranges |
+| `innovation_fard.pdf` | 8 | Innovation 2026 project paper |
 
 ## Editing and rebuilding 01–05
 

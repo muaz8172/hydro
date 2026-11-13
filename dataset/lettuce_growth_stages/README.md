@@ -1,7 +1,7 @@
 # Lettuce growth-stage dataset
 
 Photos of lettuce sorted by growth stage. This is the first dataset for a camera AI model that
-classifies the growth stage of the plants seen by the MaixCAM (see the main README, Part 5).
+classifies the growth stage of the plants seen by the MaixCAM (see [`docs/pdf/03_Dataset.pdf`](../../docs/pdf/03_Dataset.pdf)).
 
 | Stage | Folder | Photos |
 |---|---|---|
